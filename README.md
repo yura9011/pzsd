@@ -22,7 +22,7 @@ Verified VPS baseline on May 21, 2026:
 | Panel deploy path | `/opt/pz-config-panel` |
 | Panel service | `pz-config-panel.service` |
 | Panel env file | `/etc/pz-config-panel.env` |
-| Panel bind target | `127.0.0.1:3210` |
+| Panel bind target | `0.0.0.0:3210` |
 
 ## What It Does
 
@@ -32,6 +32,7 @@ Verified VPS baseline on May 21, 2026:
 - Keeps unknown settings visible with generic controls.
 - Saves only existing keys after a diff review.
 - Masks password-like values on read.
+- Requires login when `PANEL_PASSWORD` is set in the environment.
 - Manages existing `WorkshopItems` and `Mods` lines through a dedicated manual list editor with separate Workshop IDs and Mod IDs.
 - Creates per-file backups before saves and restores, with last-20 retention.
 - Uses revision checks so an old browser view cannot overwrite a newer file.
@@ -82,7 +83,7 @@ The deployment examples live in [`deploy/`](deploy/).
 1. Create `/opt/pz-config-panel` on the VPS and make it owned by `steam`.
 2. Upload `package.json`, `package-lock.json`, `src/`, `public/`, `deploy/`, and `README.md` into that directory.
 3. Install Node dependencies there with `sudo -u steam npm install --omit=dev`.
-4. Copy `deploy/pz-config-panel.env.example` to `/etc/pz-config-panel.env` and adjust the paths and server profile name.
+4. Copy `deploy/pz-config-panel.env.example` to `/etc/pz-config-panel.env` and adjust the paths, server profile name, and set a strong `PANEL_PASSWORD`.
 5. Install `deploy/project-zomboid.service` as `/etc/systemd/system/project-zomboid.service` if the current vanilla server is not already managed by a system service. Adjust `WorkingDirectory` and `ExecStart` if the server startup command differs.
 6. Install `deploy/pz-config-panel.service` as `/etc/systemd/system/pz-config-panel.service`.
 7. Install `deploy/pz-config-panel.sudoers` as `/etc/sudoers.d/pz-config-panel` with mode `0440`, then validate it with `visudo -cf`.
@@ -107,7 +108,8 @@ Useful VPS checks:
 ```bash
 sudo systemctl status project-zomboid.service --no-pager
 sudo systemctl status pz-config-panel.service --no-pager
-curl http://127.0.0.1:3210/api/server/status
+# API calls now need a token (except via SSH tunnel on 127.0.0.1 without PANEL_PASSWORD):
+curl -H 'Authorization: Bearer <token>' http://127.0.0.1:3210/api/server/status
 ```
 
 ## Access
@@ -126,8 +128,11 @@ Opening Project Zomboid game ports or configuring VPS/firewall port forwarding i
 
 ## API
 
-The UI uses the same-origin JSON API:
+The UI uses the same-origin JSON API. All endpoints except `POST /api/auth/login` require a Bearer token obtained from login:
 
+- `POST /api/auth/login` — authenticate, returns `{ token }`
+- `POST /api/auth/logout` — invalidate session
+- `GET /api/auth/check` — verify token is still valid
 - `GET /api/config/ini`
 - `PATCH /api/config/ini`
 - `GET /api/config/sandbox`
@@ -175,7 +180,7 @@ Manual VPS smoke test:
 
 1. Start the B42 server once so the profile config files exist.
 2. Point `/etc/pz-config-panel.env` at that `Server` directory and profile name.
-3. Reach the panel through the localhost tunnel.
+3. Reach the panel at `http://<vps-ip>:3210` and log in.
 4. Collapse and search config groups, then change a harmless existing setting, review the diff, and save.
 5. Open the Mods tab, review a manual Workshop ID or Mod ID list change, and save only when the INI edit is intended.
 6. Confirm a backup appears in the backup rail.

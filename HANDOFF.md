@@ -12,7 +12,7 @@ Verified VPS baseline on May 21, 2026:
 - Panel deploy path: `/opt/pz-config-panel`
 - Panel service: `pz-config-panel.service`
 - Panel env file: `/etc/pz-config-panel.env`
-- Panel bind target: `127.0.0.1:3210`
+- Panel bind target: `0.0.0.0:3210`
 
 ## V1 Guarantees
 
@@ -24,12 +24,14 @@ Verified VPS baseline on May 21, 2026:
 - Require diff review before save.
 - Create and restore per-file config backups with last-20 retention.
 - Reject stale browser revisions and unsafe config values.
+- Require login through a Bearer token session when `PANEL_PASSWORD` is set.
 - Report `Online` when the configured systemd unit is `active / running`.
 - Restart only the configured game service through the narrow sudoers path.
 
 ## Known Boundaries
 
-- The panel is private-by-network-path only. It has no V1 auth layer and must stay on localhost or another private path.
+- Auth uses in-memory sessions. Panels restart loses all active sessions, requiring re-login. No session expiry beyond server restart.
+- The panel has no HTTPS. Use a reverse proxy (nginx, Cloudflare Tunnel) for encrypted transport in production.
 - The panel reads and writes disk config. It does not yet prove the running game has loaded a saved Sandbox value.
 - The mods surface writes only `Mods` and `WorkshopItems`; map mods can still require a separate `Map` edit.
 - B42 config behavior should be checked against local references under `repos/` first. Ask for user-provided B42 docs when the source references do not settle game runtime behavior.
