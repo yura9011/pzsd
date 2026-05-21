@@ -47,6 +47,21 @@ test('config API reads masked settings, rejects added keys, and exposes restart 
   assert.equal(validSave.settings.MaxPlayers, '24');
   assert.deepEqual(validSave.changedKeys, ['MaxPlayers']);
 
+  const loadedMods = await fetch(`${api}/api/mods`).then((response) => response.json());
+  assert.deepEqual(loadedMods.workshopItems, ['12345', '98765']);
+
+  const savedMods = await fetch(`${api}/api/mods`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      revision: loadedMods.revision,
+      workshopItems: ['98765', '12345'],
+      mods: ['MapMod', 'CoreMod', 'PackAddon'],
+    }),
+  }).then((response) => response.json());
+  assert.deepEqual(savedMods.changedKeys, ['WorkshopItems', 'Mods']);
+  assert.equal(savedMods.restartRequired, true);
+
   const status = await fetch(`${api}/api/server/status`).then((response) => response.json());
   assert.equal(status.online, true);
   assert.equal(status.activeState, 'active');

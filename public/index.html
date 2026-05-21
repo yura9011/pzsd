@@ -40,6 +40,7 @@
           <nav class="tabs" aria-label="Config files">
             <button class="tab is-active" data-file="ini" type="button">server.ini</button>
             <button class="tab" data-file="sandbox" type="button">SandboxVars.lua</button>
+            <button class="tab" data-file="mods" type="button">Mods</button>
           </nav>
 
           <div class="toolbar">
@@ -47,10 +48,16 @@
               <p class="eyebrow">Loaded file</p>
               <h2 id="file-title">Loading config</h2>
             </div>
-            <label class="search">
-              <span>Filter settings</span>
-              <input id="setting-search" type="search" autocomplete="off" placeholder="Name, key, description">
-            </label>
+            <div id="config-tools" class="config-tools">
+              <div class="group-actions" aria-label="Setting group visibility">
+                <button id="expand-groups" class="quiet-button" type="button">Expand all</button>
+                <button id="collapse-groups" class="quiet-button" type="button">Collapse all</button>
+              </div>
+              <label class="search">
+                <span>Filter settings</span>
+                <input id="setting-search" type="search" autocomplete="off" placeholder="Name, key, description">
+              </label>
+            </div>
           </div>
 
           <div id="editor-error" class="error-block" hidden></div>
@@ -59,7 +66,7 @@
           <footer class="save-bar">
             <div>
               <strong id="change-count">No pending changes</strong>
-              <span>Only existing keys are written. Mods remain read-only in this version.</span>
+              <span id="save-note">Only existing keys are written. Mods use the dedicated editor.</span>
             </div>
             <button id="reload-file" class="quiet-button" type="button">Reload</button>
             <button id="review-save" class="primary-button" type="button" disabled>Review and save</button>
@@ -94,6 +101,23 @@
           <p>This write creates a backup before changing the file.</p>
           <button id="confirm-save" class="primary-button" type="button">Save file</button>
         </footer>
+      </form>
+    </dialog>
+
+    <dialog id="login-dialog" class="login-dialog">
+      <form method="dialog" class="login-form" id="login-form">
+        <h2>Panel Login</h2>
+        <p class="eyebrow">PZ Config Panel</p>
+        <div class="login-field">
+          <label for="login-username">Username</label>
+          <input id="login-username" type="text" autocomplete="username" required>
+        </div>
+        <div class="login-field">
+          <label for="login-password">Password</label>
+          <input id="login-password" type="password" autocomplete="current-password" required>
+        </div>
+        <p id="login-error" class="login-error" hidden></p>
+        <button id="login-submit" class="primary-button" type="submit">Sign in</button>
       </form>
     </dialog>
 

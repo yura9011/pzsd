@@ -16,8 +16,11 @@ export function readRuntimeConfig(env = process.env) {
     throw new Error('PZ_SYSTEMD_UNIT must be a valid .service unit name.');
   }
 
+  const username = env.PANEL_USERNAME || 'admin';
+  const password = env.PANEL_PASSWORD;
+
   return {
-    host: env.PANEL_HOST || '127.0.0.1',
+    host: env.PANEL_HOST || '0.0.0.0',
     port: parsePort(env.PANEL_PORT || '3210'),
     configDir,
     serverName,
@@ -25,6 +28,8 @@ export function readRuntimeConfig(env = process.env) {
       env.PZ_PANEL_BACKUP_DIR || path.join(configDir, '.pz-config-panel-backups'),
     ),
     systemdUnit,
+    username,
+    password,
   };
 }
 

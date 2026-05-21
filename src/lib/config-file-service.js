@@ -81,6 +81,65 @@ export class ConfigFileService {
     };
   }
 
+  async readMods() {
+    const { content, filePath, spec } = await this.readContent('ini');
+    const parsed = spec.parse(content);
+    assertModEntries(parsed);
+
+    return {
+      file: 'ini',
+      filename: path.basename(filePath),
+      revision: revisionForContent(content),
+      workshopItems: parseModSetting(parsed.settings.WorkshopItems),
+      mods: parseModSetting(parsed.settings.Mods),
+      restartRequired: false,
+    };
+  }
+
+  async saveMods(payload) {
+    assertModsPayload(payload);
+    const { content, spec } = await this.readContent('ini');
+    const currentRevision = revisionForContent(content);
+    if (payload.revision !== currentRevision) {
+      throw new HttpError(409, 'The config file changed after it was loaded. Reload before saving.');
+    }
+
+    const parsed = spec.parse(content);
+    assertModEntries(parsed);
+
+    const nextWorkshopItems = normalizeModList(payload.workshopItems, 'WorkshopItems');
+    const nextMods = normalizeModList(payload.mods, 'Mods');
+    const currentWorkshopItems = parseModSetting(parsed.settings.WorkshopItems);
+    const currentMods = parseModSetting(parsed.settings.Mods);
+    const changes = {};
+
+    if (!sameList(nextWorkshopItems, currentWorkshopItems)) {
+      changes.WorkshopItems = normalizeIniChange(nextWorkshopItems.join(';'), 'WorkshopItems');
+    }
+
+    if (!sameList(nextMods, currentMods)) {
+      changes.Mods = normalizeIniChange(nextMods.join(';'), 'Mods');
+    }
+
+    const changedKeys = Object.keys(changes);
+    if (changedKeys.length === 0) {
+      return {
+        ...(await this.readMods()),
+        changedKeys,
+      };
+    }
+
+    await this.createBackup('ini', content);
+    const nextContent = spec.apply(content, changes, parsed);
+    await atomicWrite(this.filePath('ini'), nextContent);
+
+    return {
+      ...(await this.readMods()),
+      changedKeys,
+      restartRequired: true,
+    };
+  }
+
   async listBackups(kind) {
     this.spec(kind);
 
@@ -233,6 +292,71 @@ function assertPayload(payload) {
   if (!isPlainRecord(payload) || typeof payload.revision !== 'string') {
     throw new HttpError(400, 'Save payload must include revision and changes.');
   }
+}
+
+function assertModsPayload(payload) {
+  if (
+    !isPlainRecord(payload)
+    || typeof payload.revision !== 'string'
+    || !Array.isArray(payload.workshopItems)
+    || !Array.isArray(payload.mods)
+  ) {
+    throw new HttpError(400, 'Mods save payload must include revision, workshopItems, and mods lists.');
+  }
+}
+
+function assertModEntries(parsed) {
+  if (!parsed.entries.WorkshopItems || !parsed.entries.Mods) {
+    throw new HttpError(400, 'server.ini must already contain WorkshopItems and Mods for the mods editor.');
+  }
+}
+
+function parseModSetting(value) {
+  if (typeof value !== 'string' || value === '') {
+    return [];
+  }
+
+  return value
+    .split(';')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function normalizeModList(rawItems, key) {
+  const items = [];
+  const seen = new Set();
+
+  for (const rawItem of rawItems) {
+    if (typeof rawItem !== 'string') {
+      throw new HttpError(400, `${key} items must be strings.`);
+    }
+
+    const item = rawItem.trim();
+    if (!item) {
+      throw new HttpError(400, `${key} items cannot be empty.`);
+    }
+
+    if (/[\0\r\n;]/.test(item)) {
+      throw new HttpError(400, `${key} items contain invalid config characters.`);
+    }
+
+    if (key === 'WorkshopItems' && !/^\d+$/.test(item)) {
+      throw new HttpError(400, 'WorkshopItems must contain numeric Steam Workshop IDs.');
+    }
+
+    if (seen.has(item)) {
+      throw new HttpError(400, `${key} contains duplicate items.`);
+    }
+
+    seen.add(item);
+    items.push(item);
+  }
+
+  return items;
+}
+
+function sameList(left, right) {
+  return left.length === right.length && left.every((item, index) => item === right[index]);
 }
 
 function maskSensitiveValues(settings, metadata) {

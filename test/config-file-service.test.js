@@ -84,6 +84,89 @@ test('config service keeps the newest 20 backups per file and rejects corrupt sa
   );
 });
 
+test('mods surface saves ordered WorkshopItems and Mods lists through server.ini backups', async (t) => {
+  const env = await createTempConfig(t);
+  const service = new ConfigFileService(env);
+
+  const loaded = await service.readMods();
+  assert.deepEqual(loaded.workshopItems, ['12345', '98765']);
+  assert.deepEqual(loaded.mods, ['CoreMod', 'MapMod']);
+
+  const unchanged = await service.saveMods({
+    revision: loaded.revision,
+    workshopItems: loaded.workshopItems,
+    mods: loaded.mods,
+  });
+  assert.deepEqual(unchanged.changedKeys, []);
+  assert.equal(unchanged.restartRequired, false);
+  assert.equal((await service.listBackups('ini')).length, 0);
+
+  const saved = await service.saveMods({
+    revision: loaded.revision,
+    workshopItems: ['98765', '12345', '11111'],
+    mods: ['MapMod', 'PackCore', 'PackUI', 'CoreMod'],
+  });
+
+  assert.deepEqual(saved.changedKeys, ['WorkshopItems', 'Mods']);
+  assert.equal(saved.restartRequired, true);
+  assert.deepEqual(saved.workshopItems, ['98765', '12345', '11111']);
+  assert.deepEqual(saved.mods, ['MapMod', 'PackCore', 'PackUI', 'CoreMod']);
+
+  const content = await fs.readFile(path.join(env.configDir, 'servertest.ini'), 'utf8');
+  assert.match(content, /WorkshopItems=98765;12345;11111/);
+  assert.match(content, /Mods=MapMod;PackCore;PackUI;CoreMod/);
+  assert.match(content, /# B42-style dedicated server fixture/);
+  assert.equal((await service.listBackups('ini')).length, 1);
+});
+
+test('mods surface rejects invalid lists, stale revisions, and missing source keys', async (t) => {
+  const env = await createTempConfig(t);
+  const service = new ConfigFileService(env);
+  const loaded = await service.readMods();
+
+  await assert.rejects(
+    service.saveMods({ revision: loaded.revision, workshopItems: ['abc'], mods: loaded.mods }),
+    (error) => error.status === 400 && /numeric Steam Workshop IDs/.test(error.message),
+  );
+
+  await assert.rejects(
+    service.saveMods({ revision: loaded.revision, workshopItems: loaded.workshopItems, mods: ['CoreMod', 'CoreMod'] }),
+    (error) => error.status === 400 && /duplicate/.test(error.message),
+  );
+
+  await assert.rejects(
+    service.saveMods({ revision: loaded.revision, workshopItems: loaded.workshopItems, mods: ['Pack;Variant'] }),
+    (error) => error.status === 400 && /invalid config characters/.test(error.message),
+  );
+
+  await assert.rejects(
+    service.saveMods({ revision: loaded.revision, workshopItems: loaded.workshopItems, mods: ['Pack\nVariant'] }),
+    (error) => error.status === 400 && /invalid config characters/.test(error.message),
+  );
+
+  await assert.rejects(
+    service.saveMods({ revision: loaded.revision, workshopItems: ['12345\0'], mods: loaded.mods }),
+    (error) => error.status === 400 && /invalid config characters/.test(error.message),
+  );
+
+  await assert.rejects(
+    service.saveMods({ revision: loaded.revision, workshopItems: ['', '12345'], mods: loaded.mods }),
+    (error) => error.status === 400 && /cannot be empty/.test(error.message),
+  );
+
+  await fs.appendFile(path.join(env.configDir, 'servertest.ini'), '\nConcurrentModEdit=true\n');
+  await assert.rejects(
+    service.saveMods({ revision: loaded.revision, workshopItems: ['11111'], mods: ['FreshMod'] }),
+    (error) => error.status === 409,
+  );
+
+  await fs.writeFile(path.join(env.configDir, 'servertest.ini'), 'WorkshopItems=12345\nMaxPlayers=16\n');
+  await assert.rejects(
+    service.readMods(),
+    (error) => error.status === 400 && /WorkshopItems and Mods/.test(error.message),
+  );
+});
+
 test('config service updates nested sandbox entries without writing new paths', async (t) => {
   const env = await createTempConfig(t);
   const service = new ConfigFileService(env);

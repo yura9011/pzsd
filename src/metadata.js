@@ -21,8 +21,8 @@ const INI_METADATA = {
   SafetySystem: flag('PvP', 'Allow players to toggle the PvP safety system.'),
   SteamVAC: flag('Security', 'Enable Steam VAC checks.'),
   AutoCreateUserInWhiteList: flag('Accounts', 'Create account records when players join.'),
-  Mods: list('Mods', 'Active mod IDs. Managed by a dedicated mod flow later.', true),
-  WorkshopItems: list('Mods', 'Steam Workshop item IDs. Managed by a dedicated mod flow later.', true),
+  Mods: list('Mods', 'Active mod IDs. Managed in the dedicated Mods editor.', true),
+  WorkshopItems: list('Mods', 'Steam Workshop item IDs. Managed in the dedicated Mods editor.', true),
 };
 
 const SANDBOX_METADATA = {

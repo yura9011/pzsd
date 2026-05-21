@@ -7,6 +7,7 @@ const runtime = readRuntimeConfig();
 const app = createApp({
   configFiles: new ConfigFileService(runtime),
   systemd: new SystemdService({ unit: runtime.systemdUnit }),
+  auth: { username: runtime.username, password: runtime.password },
 });
 
 app.listen(runtime.port, runtime.host, () => {

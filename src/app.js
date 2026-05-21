@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -6,40 +7,93 @@ import { HttpError } from './lib/http-error.js';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultPublicDir = path.resolve(currentDir, '../public');
 
-export function createApp({ configFiles, systemd, publicDir = defaultPublicDir }) {
+export function createApp({ configFiles, systemd, auth, publicDir = defaultPublicDir }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '128kb' }));
 
-  app.get('/api/config/ini', route(async (_req, res) => {
+  const sessions = new Map();
+
+  function requireAuth(req, res, next) {
+    if (!auth) {
+      return next();
+    }
+
+    const header = req.headers.authorization;
+    if (!header || !header.startsWith('Bearer ')) {
+      return next(new HttpError(401, 'Authentication required.'));
+    }
+
+    const token = header.slice(7);
+    if (!sessions.has(token)) {
+      return next(new HttpError(401, 'Invalid or expired token.'));
+    }
+
+    next();
+  }
+
+  if (auth) {
+    app.post('/api/auth/login', route(async (req, res) => {
+      const { username, password } = req.body || {};
+      if (username !== auth.username || password !== auth.password) {
+        throw new HttpError(401, 'Invalid username or password.');
+      }
+
+      const token = crypto.randomUUID();
+      sessions.set(token, { username, createdAt: Date.now() });
+      res.json({ token });
+    }));
+
+    app.post('/api/auth/logout', route(async (req, res) => {
+      const header = req.headers.authorization;
+      if (header?.startsWith('Bearer ')) {
+        sessions.delete(header.slice(7));
+      }
+      res.json({ ok: true });
+    }));
+  }
+
+  app.get('/api/auth/check', requireAuth, route(async (_req, res) => {
+    res.json({ ok: true });
+  }));
+
+  app.get('/api/config/ini', requireAuth, route(async (_req, res) => {
     res.json(await configFiles.read('ini'));
   }));
 
-  app.patch('/api/config/ini', route(async (req, res) => {
+  app.patch('/api/config/ini', requireAuth, route(async (req, res) => {
     res.json(await configFiles.save('ini', req.body));
   }));
 
-  app.get('/api/config/sandbox', route(async (_req, res) => {
+  app.get('/api/config/sandbox', requireAuth, route(async (_req, res) => {
     res.json(await configFiles.read('sandbox'));
   }));
 
-  app.patch('/api/config/sandbox', route(async (req, res) => {
+  app.patch('/api/config/sandbox', requireAuth, route(async (req, res) => {
     res.json(await configFiles.save('sandbox', req.body));
   }));
 
-  app.get('/api/config/backups', route(async (req, res) => {
+  app.get('/api/mods', requireAuth, route(async (_req, res) => {
+    res.json(await configFiles.readMods());
+  }));
+
+  app.patch('/api/mods', requireAuth, route(async (req, res) => {
+    res.json(await configFiles.saveMods(req.body));
+  }));
+
+  app.get('/api/config/backups', requireAuth, route(async (req, res) => {
     res.json({ backups: await configFiles.listBackups(req.query.file) });
   }));
 
-  app.post('/api/config/backups/:backupId/restore', route(async (req, res) => {
+  app.post('/api/config/backups/:backupId/restore', requireAuth, route(async (req, res) => {
     res.json(await configFiles.restore(req.params.backupId));
   }));
 
-  app.get('/api/server/status', route(async (_req, res) => {
+  app.get('/api/server/status', requireAuth, route(async (_req, res) => {
     res.json(await systemd.status());
   }));
 
-  app.post('/api/server/restart', route(async (_req, res) => {
+  app.post('/api/server/restart', requireAuth, route(async (_req, res) => {
     res.json({
       restarted: true,
       status: await systemd.restart(),
