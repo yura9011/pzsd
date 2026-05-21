@@ -1,0 +1,18 @@
+{
+  "name": "pz-config-panel",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Private config panel for one vanilla Project Zomboid server.",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/app.test.js test/config-file-service.test.js test/parsers.test.js test/systemd-service.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}

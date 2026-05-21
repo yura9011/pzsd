@@ -1,0 +1,7 @@
+node_modules/
+.env
+coverage/
+.pz-config-panel-backups/
+.demo-data/
+.agents/
+repos/

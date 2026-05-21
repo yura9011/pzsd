@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>PZ Config Panel</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="masthead">
+      <div>
+        <p class="eyebrow">Private Project Zomboid admin surface</p>
+        <h1>Server Configuration</h1>
+      </div>
+      <section class="service-bar" aria-label="Project Zomboid service status">
+        <div>
+          <span class="eyebrow">systemd service</span>
+          <strong id="service-unit">Loading</strong>
+          <small id="service-detail" class="service-detail">Checking service state</small>
+        </div>
+        <span id="service-state" class="state-pill">Checking</span>
+        <button id="refresh-status" class="quiet-button" type="button">Refresh</button>
+        <button id="restart-server" class="danger-button" type="button">Restart server</button>
+      </section>
+    </header>
+
+    <main class="workspace">
+      <section id="restart-banner" class="restart-banner" hidden>
+        <div>
+          <strong>Config saved.</strong>
+          <span>A server restart may be required before players see the change.</span>
+        </div>
+        <button id="banner-restart" class="danger-button" type="button">Restart now</button>
+      </section>
+
+      <p id="flash" class="flash" role="status" aria-live="polite" hidden></p>
+
+      <section class="editor-shell">
+        <div class="editor-main">
+          <nav class="tabs" aria-label="Config files">
+            <button class="tab is-active" data-file="ini" type="button">server.ini</button>
+            <button class="tab" data-file="sandbox" type="button">SandboxVars.lua</button>
+          </nav>
+
+          <div class="toolbar">
+            <div>
+              <p class="eyebrow">Loaded file</p>
+              <h2 id="file-title">Loading config</h2>
+            </div>
+            <label class="search">
+              <span>Filter settings</span>
+              <input id="setting-search" type="search" autocomplete="off" placeholder="Name, key, description">
+            </label>
+          </div>
+
+          <div id="editor-error" class="error-block" hidden></div>
+          <div id="settings" class="setting-groups" aria-live="polite"></div>
+
+          <footer class="save-bar">
+            <div>
+              <strong id="change-count">No pending changes</strong>
+              <span>Only existing keys are written. Mods remain read-only in this version.</span>
+            </div>
+            <button id="reload-file" class="quiet-button" type="button">Reload</button>
+            <button id="review-save" class="primary-button" type="button" disabled>Review and save</button>
+          </footer>
+        </div>
+
+        <aside class="backup-rail">
+          <div class="rail-heading">
+            <div>
+              <p class="eyebrow">File history</p>
+              <h2>Backups</h2>
+            </div>
+            <button id="refresh-backups" class="quiet-button" type="button">Refresh</button>
+          </div>
+          <p class="rail-copy">A backup is created before each save and restore. The panel keeps the newest 20 for each file.</p>
+          <div id="backups" class="backup-list"></div>
+        </aside>
+      </section>
+    </main>
+
+    <dialog id="diff-dialog">
+      <form method="dialog" class="dialog-shell">
+        <header>
+          <div>
+            <p class="eyebrow">Pending write</p>
+            <h2>Review changes</h2>
+          </div>
+          <button class="quiet-button" value="cancel" type="submit">Close</button>
+        </header>
+        <div id="diff-list" class="diff-list"></div>
+        <footer>
+          <p>This write creates a backup before changing the file.</p>
+          <button id="confirm-save" class="primary-button" type="button">Save file</button>
+        </footer>
+      </form>
+    </dialog>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

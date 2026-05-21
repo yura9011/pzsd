@@ -1,0 +1,17 @@
+[Unit]
+Description=Private Project Zomboid config panel
+After=network.target project-zomboid.service
+
+[Service]
+Type=simple
+User=steam
+Group=steam
+WorkingDirectory=/opt/pz-config-panel
+EnvironmentFile=/etc/pz-config-panel.env
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=3
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

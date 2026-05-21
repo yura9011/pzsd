@@ -1,0 +1,18 @@
+[Unit]
+Description=Project Zomboid B42 dedicated server
+After=network.target
+
+[Service]
+Type=simple
+User=steam
+Group=steam
+WorkingDirectory=/home/steam/pz_server
+Environment=PZ_SERVER_NAME=servertest
+ExecStart=/home/steam/pz_server/start-server.sh -servername ${PZ_SERVER_NAME}
+Restart=on-failure
+RestartSec=10
+KillSignal=SIGINT
+TimeoutStopSec=120
+
+[Install]
+WantedBy=multi-user.target
