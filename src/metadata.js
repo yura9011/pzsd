@@ -509,10 +509,10 @@ const SANDBOX_METADATA = {
   DaysUntilMaximumRatIndex: number('Animals', 'Days to reach the maximum vermin index.', 0, 365),
 
   // World & Map
-  AllowMiniMap: flag('Map', 'Enable a mini-map window.'),
-  AllowWorldMap: flag('Map', 'Allow access to the world map.'),
-  MapAllKnown: flag('Map', 'World map is fully revealed from the start.'),
-  MapNeedsLight: flag('Map', 'Maps need a light source to be read.'),
+  'Map.AllowMiniMap': flag('Map', 'Enable a mini-map window.'),
+  'Map.AllowWorldMap': flag('Map', 'Allow access to the world map.'),
+  'Map.MapAllKnown': flag('Map', 'World map is fully revealed from the start.'),
+  'Map.MapNeedsLight': flag('Map', 'Maps need a light source to be read.'),
   ClayLakeChance: number('World', 'Chance of clay floors near lakes.', 0, 1),
   ClayRiverChance: number('World', 'Chance of clay floors near rivers.', 0, 1),
 
