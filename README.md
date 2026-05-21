@@ -34,6 +34,7 @@ Verified VPS baseline on May 21, 2026:
 - Masks password-like values on read.
 - Requires login when `PANEL_PASSWORD` is set in the environment.
 - Manages existing `WorkshopItems` and `Mods` lines through a dedicated manual list editor with separate Workshop IDs and Mod IDs.
+- Manages spawn regions through a dedicated Spawn tab — reads `<server>_spawnregions.lua`, shows all regions with checkboxes, rewrites the file with only enabled regions to control which spawn options appear in-game.
 - Creates per-file backups before saves and restores, with last-20 retention.
 - Uses revision checks so an old browser view cannot overwrite a newer file.
 - Shows `Online` when the configured `systemd` unit is `active / running`, otherwise shows `Offline`, and asks for confirmation before restart.
@@ -159,6 +160,8 @@ Save requests contain:
 
 Only changed keys already present in the source file are accepted. The dedicated mods API still requires the `WorkshopItems` and `Mods` keys to already exist in `server.ini`; it writes those lists together with the same INI revision and backup protections.
 
+The spawn API reads and rewrites `<PZ_SERVER_NAME>_spawnregions.lua` entirely. The payload contains the full regions array with `enabled` booleans; disabled regions are excluded from the rewritten file. If the file does not exist, the panel returns 4 vanilla region defaults and creates the file on first save.
+
 ## Sandbox Verification Boundary
 
 For a saved sandbox change, V1 can prove:
@@ -185,6 +188,7 @@ Manual VPS smoke test:
 3. Reach the panel at `http://<vps-ip>:3210` and log in.
 4. Collapse and search config groups, then change a harmless existing setting, review the diff, and save.
 5. Open the Mods tab, review a manual Workshop ID or Mod ID list change, and save only when the INI edit is intended.
-6. Confirm a backup appears in the backup rail.
-7. Restore that backup and confirm the file value returns.
-8. Confirm status is visible and restart requires confirmation.
+6. Open the Spawn tab, uncheck one or more regions, review the diff, and save. Verify that `<server>_spawnregions.lua` on disk contains only the enabled regions.
+7. Confirm a backup appears in the backup rail.
+8. Restore that backup and confirm the file value returns.
+9. Confirm status is visible and restart requires confirmation.
