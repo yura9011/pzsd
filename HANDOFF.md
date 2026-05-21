@@ -14,6 +14,10 @@ Verified VPS baseline on May 21, 2026:
 - Panel env file: `/etc/pz-config-panel.env`
 - Panel bind target: `0.0.0.0:3210`
 
+## Metadata Coverage
+
+The panel ships with a curated metadata catalog covering ~110 INI settings and ~210 SandboxVars settings. Every known key has a type, group label, and description from the PZ wiki. Unknown keys receive an auto-generated label from the camelCase key name.
+
 ## V1 Guarantees
 
 - Read and edit existing INI and Sandbox keys through the GUI.

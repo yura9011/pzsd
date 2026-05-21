@@ -27,9 +27,9 @@ Verified VPS baseline on May 21, 2026:
 ## What It Does
 
 - Shows every existing setting parsed from `server.ini` and `SandboxVars.lua`.
-- Keeps large config groups collapsible and lets search reopen matching settings.
+- Categorizes settings into labelled groups (General, PvP, Network, Safehouses, Zombie Lore, XP Multipliers, etc.) with full descriptions sourced from the PZ wiki.
 - Uses known controls for common booleans, numbers, enums, and sensitive fields.
-- Keeps unknown settings visible with generic controls.
+- Keeps unknown settings visible with auto-generated descriptive labels.
 - Saves only existing keys after a diff review.
 - Masks password-like values on read.
 - Requires login when `PANEL_PASSWORD` is set in the environment.
