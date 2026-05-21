@@ -139,6 +139,8 @@ The UI uses the same-origin JSON API. All endpoints except `POST /api/auth/login
 - `PATCH /api/config/sandbox`
 - `GET /api/mods`
 - `PATCH /api/mods`
+- `GET /api/config/spawn`
+- `PATCH /api/config/spawn`
 - `GET /api/config/backups?file=ini|sandbox`
 - `POST /api/config/backups/:backupId/restore`
 - `GET /api/server/status`

@@ -194,6 +194,104 @@ test('config service updates nested sandbox entries without writing new paths', 
   );
 });
 
+test('readSpawn returns default regions when file does not exist', async (t) => {
+  const env = await createTempConfig(t);
+  const service = new ConfigFileService(env);
+
+  const data = await service.readSpawn();
+  assert.equal(data.regions.length, 4);
+  assert.equal(data.regions[0].name, 'Muldraugh, KY');
+  assert.equal(data.revision, null);
+  assert.equal(data.filename, 'servertest_spawnregions.lua');
+});
+
+test('readSpawn returns parsed regions when file exists', async (t) => {
+  const env = await createTempConfig(t);
+  const service = new ConfigFileService(env);
+  const content = `function SpawnRegions()
+    return {
+        { name = "Rosewood, KY", file = "media/maps/Rosewood, KY/spawnpoints.lua" },
+        { name = "Base Custom", serverfile = "servertest_spawnpoints.lua" },
+    }
+end`;
+  const filePath = path.join(env.configDir, 'servertest_spawnregions.lua');
+  await fs.writeFile(filePath, content);
+
+  const data = await service.readSpawn();
+  assert.equal(data.regions.length, 2);
+  assert.equal(data.regions[0].name, 'Rosewood, KY');
+  assert.equal(data.regions[0].isServerFile, false);
+  assert.equal(data.regions[1].name, 'Base Custom');
+  assert.equal(data.regions[1].isServerFile, true);
+  assert.equal(typeof data.revision, 'string');
+  assert.equal(data.revision.length, 64);
+});
+
+test('saveSpawn writes only enabled regions and creates backup', async (t) => {
+  const env = await createTempConfig(t);
+  const service = new ConfigFileService(env);
+  const filePath = path.join(env.configDir, 'servertest_spawnregions.lua');
+
+  const original = `function SpawnRegions()
+    return {
+        { name = "Muldraugh, KY", file = "media/maps/Muldraugh, KY/spawnpoints.lua" },
+        { name = "Riverside, KY", file = "media/maps/Riverside, KY/spawnpoints.lua" },
+        { name = "Rosewood, KY", file = "media/maps/Rosewood, KY/spawnpoints.lua" },
+    }
+end`;
+  await fs.writeFile(filePath, original);
+
+  const before = await service.readSpawn();
+  const saved = await service.saveSpawn({
+    revision: before.revision,
+    regions: [
+      { name: 'Muldraugh, KY', file: 'media/maps/Muldraugh, KY/spawnpoints.lua', isServerFile: false, enabled: true },
+      { name: 'Riverside, KY', file: 'media/maps/Riverside, KY/spawnpoints.lua', isServerFile: false, enabled: false },
+      { name: 'Rosewood, KY', file: 'media/maps/Rosewood, KY/spawnpoints.lua', isServerFile: false, enabled: false },
+    ],
+  });
+
+  assert.deepEqual(saved.changedKeys, ['spawnregions']);
+  assert.equal(saved.restartRequired, true);
+  assert.equal(saved.regions.length, 3);
+  assert.equal(saved.regions[0].enabled, true);
+  assert.equal(saved.regions[1].enabled, false);
+  assert.equal(saved.regions[2].enabled, false);
+
+  const diskContent = await fs.readFile(filePath, 'utf8');
+  assert.match(diskContent, /Muldraugh, KY/);
+  assert.doesNotMatch(diskContent, /Riverside, KY/);
+  assert.doesNotMatch(diskContent, /Rosewood, KY/);
+
+  const spawnBackups = (await fs.readdir(env.backupDir)).filter((name) => name.startsWith('spawnregions--'));
+  assert.equal(spawnBackups.length, 1);
+});
+
+test('saveSpawn rejects stale revision', async (t) => {
+  const env = await createTempConfig(t);
+  const service = new ConfigFileService(env);
+  const filePath = path.join(env.configDir, 'servertest_spawnregions.lua');
+  await fs.writeFile(filePath, 'function SpawnRegions()\n\treturn {\n\t\t{ name = "Test", file = "test" },\n\t}\nend');
+
+  await assert.rejects(
+    service.saveSpawn({
+      revision: 'stale-revision',
+      regions: [{ name: 'Test', file: 'test', isServerFile: false, enabled: true }],
+    }),
+    (error) => error.status === 409 && /changed after/.test(error.message),
+  );
+});
+
+test('saveSpawn rejects empty regions array', async (t) => {
+  const env = await createTempConfig(t);
+  const service = new ConfigFileService(env);
+
+  await assert.rejects(
+    service.saveSpawn({ revision: 'any', regions: [] }),
+    (error) => error.status === 400 && /least one/.test(error.message),
+  );
+});
+
 async function createTempConfig(t) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'pz-panel-'));
   const configDir = path.join(root, 'Server');

@@ -6,15 +6,23 @@ import { HttpError } from './http-error.js';
 import {
   applyIniChanges,
   applySandboxChanges,
+  generateSpawnRegionsContent,
   normalizeIniChange,
   normalizeSandboxChange,
   parseIniContent,
   parseSandboxContent,
+  parseSpawnRegionsContent,
   revisionForContent,
   validateChangeKey,
 } from './parsers.js';
 
 const BACKUP_LIMIT = 20;
+const DEFAULT_SPAWN_REGIONS = [
+  { name: 'Muldraugh, KY', file: 'media/maps/Muldraugh, KY/spawnpoints.lua', isServerFile: false, enabled: true },
+  { name: 'West Point, KY', file: 'media/maps/West Point, KY/spawnpoints.lua', isServerFile: false, enabled: true },
+  { name: 'Riverside, KY', file: 'media/maps/Riverside, KY/spawnpoints.lua', isServerFile: false, enabled: true },
+  { name: 'Rosewood, KY', file: 'media/maps/Rosewood, KY/spawnpoints.lua', isServerFile: false, enabled: true },
+];
 const FILE_SPECS = {
   ini: {
     label: 'server.ini',
@@ -202,6 +210,87 @@ export class ConfigFileService {
     }
 
     return path.join(this.configDir, `${this.serverName}_SandboxVars.lua`);
+  }
+
+  spawnRegionsFilePath() {
+    return path.join(this.configDir, `${this.serverName}_spawnregions.lua`);
+  }
+
+  async readSpawn() {
+    const filePath = this.spawnRegionsFilePath();
+    let content;
+    try {
+      content = await fs.readFile(filePath, 'utf8');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw new HttpError(500, 'Failed to read spawn regions file.');
+      }
+      return {
+        regions: DEFAULT_SPAWN_REGIONS,
+        revision: null,
+        filename: `${this.serverName}_spawnregions.lua`,
+      };
+    }
+
+    const regions = parseSpawnRegionsContent(content);
+    return {
+      regions: regions.length > 0 ? regions : DEFAULT_SPAWN_REGIONS.map((r) => ({ ...r, enabled: false })),
+      revision: revisionForContent(content),
+      filename: path.basename(filePath),
+    };
+  }
+
+  async saveSpawn(payload) {
+    if (!isPlainRecord(payload) || !Array.isArray(payload.regions)) {
+      throw new HttpError(400, 'Spawn save payload must include a regions array.');
+    }
+
+    const filePath = this.spawnRegionsFilePath();
+    let currentContent;
+    try {
+      currentContent = await fs.readFile(filePath, 'utf8');
+    } catch (error) {
+      if (error.code !== 'ENOENT') {
+        throw new HttpError(500, 'Failed to read spawn regions file.');
+      }
+      currentContent = null;
+    }
+
+    if (currentContent !== null && payload.revision !== revisionForContent(currentContent)) {
+      throw new HttpError(409, 'The spawn regions file changed after it was loaded. Reload before saving.');
+    }
+
+    const enabled = payload.regions.filter((r) => r.enabled);
+    if (enabled.length === 0) {
+      throw new HttpError(400, 'At least one spawn region must be enabled.');
+    }
+
+    for (const r of enabled) {
+      if (typeof r.name !== 'string' || typeof r.file !== 'string') {
+        throw new HttpError(400, 'Each region must have a name and file path.');
+      }
+    }
+
+    if (currentContent !== null) {
+      await fs.mkdir(this.backupDir, { recursive: true });
+      const timestamp = this.clock().toISOString().replaceAll(':', '-').replaceAll('.', '-');
+      const revision = revisionForContent(currentContent).slice(0, 12);
+      const nonce = randomBytes(3).toString('hex');
+      const backupId = `spawnregions--${timestamp}--${revision}--${nonce}.bak`;
+      await fs.writeFile(path.join(this.backupDir, backupId), currentContent, { flag: 'wx' });
+    }
+
+    await fs.mkdir(this.backupDir, { recursive: true });
+    const nextContent = generateSpawnRegionsContent(payload.regions);
+    await atomicWrite(filePath, nextContent);
+
+    return {
+      regions: payload.regions,
+      revision: revisionForContent(nextContent),
+      filename: path.basename(filePath),
+      changedKeys: ['spawnregions'],
+      restartRequired: true,
+    };
   }
 
   normalizeChanges(kind, rawChanges, parsed, metadata) {

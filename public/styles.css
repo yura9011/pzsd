@@ -631,6 +631,69 @@ dialog::backdrop {
   padding: 0.75rem;
 }
 
+.spawn-shell {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.spawn-info {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.spawn-info strong {
+  font-size: 1rem;
+}
+
+.spawn-info p {
+  color: var(--muted);
+  line-height: 1.4;
+  margin-bottom: 0;
+}
+
+.spawn-region-list {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.spawn-region-item {
+  align-items: center;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: auto 1fr auto;
+  padding: 0.75rem 1rem;
+}
+
+.spawn-region-item input {
+  accent-color: var(--green);
+  min-height: auto;
+  width: auto;
+}
+
+.spawn-region-item strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.spawn-region-item code {
+  font-size: 0.8rem;
+}
+
+.region-src {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.spawn-count {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .sr-only {
   clip: rect(0, 0, 0, 0);
   border: 0;

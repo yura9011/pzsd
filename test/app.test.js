@@ -70,6 +70,58 @@ test('config API reads masked settings, rejects added keys, and exposes restart 
   assert.equal(restart.restarted, true);
 });
 
+test('spawn API returns default regions without file and saves enabled-only regions', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'pz-panel-spawn-'));
+  const configDir = path.join(root, 'Server');
+  const backupDir = path.join(root, 'backups');
+  await fs.mkdir(configDir, { recursive: true });
+  await fs.copyFile(new URL('./fixtures/server.ini', import.meta.url), path.join(configDir, 'servertest.ini'));
+  await fs.copyFile(new URL('./fixtures/sandbox.lua', import.meta.url), path.join(configDir, 'servertest_SandboxVars.lua'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+
+  const app = createApp({
+    configFiles: new ConfigFileService({ configDir, backupDir, serverName: 'servertest' }),
+    systemd: {
+      async status() {
+        return { unit: 'project-zomboid.service', available: true, online: true, activeState: 'active', subState: 'running' };
+      },
+      async restart() {
+        return { unit: 'project-zomboid.service', available: true, online: true, activeState: 'active', subState: 'running' };
+      },
+    },
+  });
+  const api = await listen(t, app);
+
+  const loaded = await fetch(`${api}/api/config/spawn`).then((response) => response.json());
+  assert.equal(loaded.regions.length, 4);
+  assert.equal(loaded.regions[0].name, 'Muldraugh, KY');
+  assert.equal(loaded.revision, null);
+
+  const saved = await fetch(`${api}/api/config/spawn`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      revision: null,
+      regions: [
+        { name: 'Rosewood, KY', file: 'media/maps/Rosewood, KY/spawnpoints.lua', isServerFile: false, enabled: true },
+        { name: 'Riverside, KY', file: 'media/maps/Riverside, KY/spawnpoints.lua', isServerFile: false, enabled: false },
+      ],
+    }),
+  }).then((response) => response.json());
+
+  assert.deepEqual(saved.changedKeys, ['spawnregions']);
+  assert.equal(saved.restartRequired, true);
+  assert.equal(saved.regions.length, 2);
+  assert.equal(saved.regions[0].enabled, true);
+  assert.equal(saved.regions[1].enabled, false);
+
+  const reloaded = await fetch(`${api}/api/config/spawn`).then((response) => response.json());
+  assert.equal(reloaded.regions.length, 1);
+  assert.equal(reloaded.regions[0].name, 'Rosewood, KY');
+  assert.equal(reloaded.regions[0].enabled, true);
+  assert.equal(typeof reloaded.revision, 'string');
+});
+
 async function listen(t, app) {
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));

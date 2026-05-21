@@ -81,6 +81,14 @@ export function createApp({ configFiles, systemd, auth, publicDir = defaultPubli
     res.json(await configFiles.saveMods(req.body));
   }));
 
+  app.get('/api/config/spawn', requireAuth, route(async (_req, res) => {
+    res.json(await configFiles.readSpawn());
+  }));
+
+  app.patch('/api/config/spawn', requireAuth, route(async (req, res) => {
+    res.json(await configFiles.saveSpawn(req.body));
+  }));
+
   app.get('/api/config/backups', requireAuth, route(async (req, res) => {
     res.json({ backups: await configFiles.listBackups(req.query.file) });
   }));

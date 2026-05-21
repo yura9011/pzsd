@@ -327,6 +327,41 @@ function trimRightIndex(line, index) {
   return cursor;
 }
 
+export function parseSpawnRegionsContent(content) {
+  const regions = [];
+  const lines = content.split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('--')) {
+      continue;
+    }
+
+    const nameMatch = trimmed.match(/name\s*=\s*"([^"]+)"/);
+    const fileMatch = trimmed.match(/(?:server)?file\s*=\s*"([^"]+)"/);
+    if (nameMatch && fileMatch) {
+      regions.push({
+        name: nameMatch[1],
+        file: fileMatch[1],
+        isServerFile: trimmed.includes('serverfile'),
+        enabled: true,
+      });
+    }
+  }
+  return regions;
+}
+
+export function generateSpawnRegionsContent(regions, newline = '\n') {
+  const enabled = regions.filter((r) => r.enabled);
+  const lines = ['function SpawnRegions()', '\treturn {'];
+  for (const r of enabled) {
+    const key = r.isServerFile ? 'serverfile' : 'file';
+    lines.push(`\t\t{ name = "${escapeLuaString(r.name)}", ${key} = "${escapeLuaString(r.file)}" },`);
+  }
+  lines.push('\t}');
+  lines.push('end');
+  return lines.join(newline);
+}
+
 function splitContent(content) {
   return {
     lines: content.split(/\r?\n/),

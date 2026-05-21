@@ -5,6 +5,8 @@ const state = {
   files: new Map(),
   mods: null,
   modDraft: null,
+  spawnData: null,
+  spawnOriginal: null,
   pendingChanges: null,
   groupStates: new Map(),
 };
@@ -167,7 +169,9 @@ async function selectFile(file) {
 
   if (file === 'mods' && !state.mods) {
     await loadMods(true);
-  } else if (file !== 'mods' && !state.files.has(file)) {
+  } else if (file === 'spawn' && !state.spawnData) {
+    await loadSpawn(true);
+  } else if (file !== 'mods' && file !== 'spawn' && !state.files.has(file)) {
     await loadFile(file, true);
   }
 
@@ -206,11 +210,32 @@ async function loadMods(forceRender = false) {
   }
 }
 
+async function loadSpawn(forceRender = false) {
+  try {
+    const data = await requestJson('/api/config/spawn');
+    state.spawnData = data;
+    state.spawnOriginal = data.regions.map((r) => ({ ...r }));
+    if (state.activeFile === 'spawn' || forceRender) {
+      hideEditorError();
+      renderActiveFile();
+    }
+  } catch (error) {
+    if (state.activeFile === 'spawn' || forceRender) {
+      showEditorError(error.message);
+    }
+  }
+}
+
 async function reloadActiveSurface() {
   state.pendingChanges = null;
   if (state.activeFile === 'mods') {
     await loadMods(true);
     await loadBackups('ini');
+    return;
+  }
+
+  if (state.activeFile === 'spawn') {
+    await loadSpawn(true);
     return;
   }
 
@@ -220,6 +245,11 @@ async function reloadActiveSurface() {
 function renderActiveFile() {
   if (state.activeFile === 'mods') {
     renderMods();
+    return;
+  }
+
+  if (state.activeFile === 'spawn') {
+    renderSpawn();
     return;
   }
 
@@ -350,6 +380,60 @@ function renderMods() {
   for (const button of elements.settings.querySelectorAll('[data-mod-move]')) {
     button.addEventListener('click', () => {
       moveModItem(button.dataset.list, Number(button.dataset.index), button.dataset.modMove);
+    });
+  }
+
+  updateChangeState();
+}
+
+function renderSpawn() {
+  elements.search.value = '';
+  elements.configTools.hidden = true;
+  elements.saveNote.textContent = 'Uncheck regions to remove them. The file is rewritten with only enabled regions.';
+
+  if (!state.spawnData) {
+    elements.title.textContent = 'Spawn configuration unavailable';
+    elements.settings.innerHTML = '<p class="empty-state">Spawn regions have not loaded yet.</p>';
+    updateChangeState();
+    return;
+  }
+
+  elements.title.textContent = state.spawnData.filename;
+  const enabledCount = state.spawnData.regions.filter((r) => r.enabled).length;
+  elements.settings.innerHTML = `
+    <section class="spawn-shell">
+      <div class="spawn-info">
+        <strong>Spawn Regions</strong>
+        <p>Select which regions appear in the player spawn selector. Disabled regions are removed from the file. At least one must remain enabled.</p>
+      </div>
+      <div class="spawn-region-list">
+        ${state.spawnData.regions.map((region, index) => `
+          <label class="spawn-region-item">
+            <input type="checkbox" data-spawn-index="${index}" ${region.enabled ? 'checked' : ''}>
+            <div>
+              <strong>${escapeHtml(region.name)}</strong>
+              <code>${escapeHtml(region.isServerFile ? region.file : region.file)}</code>
+            </div>
+            <span class="region-src">${region.isServerFile ? 'server file' : 'map file'}</span>
+          </label>
+        `).join('')}
+      </div>
+      <div class="spawn-count">
+        <span><strong id="spawn-enabled-count">${enabledCount}</strong> of ${state.spawnData.regions.length} regions enabled</span>
+      </div>
+    </section>
+  `;
+
+  for (const checkbox of elements.settings.querySelectorAll('[data-spawn-index]')) {
+    checkbox.addEventListener('change', () => {
+      const index = Number(checkbox.dataset.spawnIndex);
+      state.spawnData.regions[index].enabled = checkbox.checked;
+      const count = state.spawnData.regions.filter((r) => r.enabled).length;
+      const countEl = document.querySelector('#spawn-enabled-count');
+      if (countEl) {
+        countEl.textContent = String(count);
+      }
+      updateChangeState();
     });
   }
 
@@ -511,6 +595,10 @@ function collectChanges() {
     return collectModChanges();
   }
 
+  if (state.activeFile === 'spawn') {
+    return collectSpawnChanges();
+  }
+
   const file = state.files.get(state.activeFile);
   if (!file) {
     return {};
@@ -540,13 +628,37 @@ function collectChanges() {
   return changes;
 }
 
+function collectSpawnChanges() {
+  if (!state.spawnData || !state.spawnOriginal) {
+    return {};
+  }
+
+  const changes = { regions: [] };
+  for (let i = 0; i < state.spawnData.regions.length; i++) {
+    const current = state.spawnData.regions[i];
+    const original = state.spawnOriginal[i];
+    if (current.enabled !== original.enabled) {
+      changes.regions.push({
+        index: i,
+        name: current.name,
+        file: current.file,
+        wasEnabled: original.enabled,
+        nowEnabled: current.enabled,
+      });
+    }
+  }
+
+  changes.hasChanges = changes.regions.length > 0;
+  return changes;
+}
+
 function updateChangeState() {
   const count = Object.keys(collectChanges()).length;
   elements.changeCount.textContent = count === 0
     ? 'No pending changes'
     : `${count} pending ${count === 1 ? 'change' : 'changes'}`;
   elements.reviewSave.disabled = count === 0;
-  if (state.activeFile !== 'mods') {
+  if (state.activeFile !== 'mods' && state.activeFile !== 'spawn') {
     updateGroupDirtyCounts();
   }
 }
@@ -554,6 +666,11 @@ function updateChangeState() {
 function reviewChanges() {
   if (state.activeFile === 'mods') {
     reviewModChanges();
+    return;
+  }
+
+  if (state.activeFile === 'spawn') {
+    reviewSpawnChanges();
     return;
   }
 
@@ -586,6 +703,11 @@ function reviewChanges() {
 async function saveReviewedChanges() {
   if (state.activeFile === 'mods') {
     await saveReviewedMods();
+    return;
+  }
+
+  if (state.activeFile === 'spawn') {
+    await saveReviewedSpawn();
     return;
   }
 
@@ -665,6 +787,29 @@ function reviewModChanges() {
   elements.diffDialog.showModal();
 }
 
+function reviewSpawnChanges() {
+  const changes = collectSpawnChanges();
+  if (!state.spawnData || !changes.hasChanges) {
+    return;
+  }
+
+  state.pendingChanges = {
+    regions: state.spawnData.regions.map((r) => ({ name: r.name, file: r.file, isServerFile: r.isServerFile, enabled: r.enabled })),
+  };
+  elements.diffList.innerHTML = changes.regions.map((r) => `
+    <article class="diff-row">
+      <div>
+        <strong>${escapeHtml(r.name)}</strong>
+        <code>${escapeHtml(r.file)}</code>
+      </div>
+      <dl>
+        <div><dt>Action</dt><dd>${r.nowEnabled ? 'Region enabled' : 'Region disabled'}</dd></div>
+      </dl>
+    </article>
+  `).join('');
+  elements.diffDialog.showModal();
+}
+
 async function saveReviewedMods() {
   if (!state.mods || !state.pendingChanges) {
     return;
@@ -701,7 +846,41 @@ async function saveReviewedMods() {
   }
 }
 
+async function saveReviewedSpawn() {
+  if (!state.spawnData || !state.pendingChanges) {
+    return;
+  }
+
+  elements.confirmSave.disabled = true;
+  try {
+    const saved = await requestJson('/api/config/spawn', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        revision: state.spawnData.revision,
+        regions: state.pendingChanges.regions,
+      }),
+    });
+    state.spawnData = saved;
+    state.spawnOriginal = saved.regions.map((r) => ({ ...r }));
+    state.pendingChanges = null;
+    elements.diffDialog.close();
+    renderActiveFile();
+    showRestartBanner();
+    const enabledCount = saved.regions.filter((r) => r.enabled).length;
+    showFlash(`${saved.filename} saved. ${enabledCount} regions enabled.`, 'ok');
+  } catch (error) {
+    showFlash(error.message, 'error');
+  } finally {
+    elements.confirmSave.disabled = false;
+  }
+}
+
 async function loadBackups(file) {
+  if (file === null || file === undefined) {
+    elements.backups.innerHTML = '<p class="empty-state">Backups are managed per-file in the other tabs.</p>';
+    return;
+  }
+
   try {
     const data = await requestJson(`/api/config/backups?file=${file}`);
     renderBackups(data.backups);
@@ -979,7 +1158,9 @@ function sameList(left, right) {
 }
 
 function backupFileForSurface(surface) {
-  return surface === 'mods' ? 'ini' : surface;
+  if (surface === 'mods') return 'ini';
+  if (surface === 'spawn') return null;
+  return surface;
 }
 
 function controlId(key) {
