@@ -7,7 +7,7 @@ import { HttpError } from './lib/http-error.js';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultPublicDir = path.resolve(currentDir, '../public');
 
-export function createApp({ configFiles, systemd, auth, publicDir = defaultPublicDir }) {
+export function createApp({ configFiles, systemd, live, auth, publicDir = defaultPublicDir }) {
   if (!auth || typeof auth.password !== 'string' || auth.password === '') {
     throw new Error('Panel auth configuration must include a password.');
   }
@@ -113,6 +113,26 @@ export function createApp({ configFiles, systemd, auth, publicDir = defaultPubli
       restarted: true,
       status: await systemd.restart(),
     });
+  }));
+
+  app.get('/api/live/rcon/status', requireAuth, route(async (_req, res) => {
+    res.json(await live.status());
+  }));
+
+  app.get('/api/live/players', requireAuth, route(async (_req, res) => {
+    res.json(await live.players());
+  }));
+
+  app.post('/api/live/commands', requireAuth, route(async (req, res) => {
+    res.json(await live.command(req.body?.command));
+  }));
+
+  app.post('/api/live/save', requireAuth, route(async (_req, res) => {
+    res.json(await live.save());
+  }));
+
+  app.post('/api/live/broadcast', requireAuth, route(async (req, res) => {
+    res.json(await live.broadcast(req.body?.message));
   }));
 
   app.use(express.static(publicDir, { extensions: ['html'] }));

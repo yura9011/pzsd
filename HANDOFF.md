@@ -26,6 +26,7 @@ The panel ships with a curated metadata catalog covering ~110 INI settings and ~
 - Keep large config groups collapsible while search reopens matching settings.
 - Edit existing `Mods` and `WorkshopItems` INI lists through a dedicated manual mods surface.
 - Manage spawn regions through a dedicated Spawn tab — reads `<server>_spawnregions.lua`, shows all regions with checkboxes, rewrites the file with only enabled regions.
+- Operate the running server through a local RCON Live tab for online players, manual commands, world save, and broadcasts.
 - Require diff review before save.
 - Create and restore per-file config backups with last-20 retention.
 - Reject stale browser revisions and unsafe config values.
@@ -38,6 +39,7 @@ The panel ships with a curated metadata catalog covering ~110 INI settings and ~
 - Auth uses in-memory sessions. Panel restart loses all active sessions, requiring re-login. Sessions expire after `SESSION_TTL_HOURS` hours, defaulting to 8.
 - The panel has no HTTPS. Use a reverse proxy (nginx, Cloudflare Tunnel) for encrypted transport in production.
 - The panel reads and writes disk config. It does not yet prove the running game has loaded a saved Sandbox value.
+- Live RCON operations need `PZ_RCON_PASSWORD` in the panel env plus matching RCON values in `servertest.ini`; they are unavailable until the game RCON listener is ready.
 - The mods surface writes only `Mods` and `WorkshopItems`; map mods can still require a separate `Map` edit.
 - The Spawn tab rewrites `<server>_spawnregions.lua` from scratch — regions disabled and saved are removed from the file entirely. To re-enable a removed region, the user must re-add it manually or restore a backup.
 - The Spawn tab does not manage `<server>_spawnpoints.lua` or `SpawnPoint` in server.ini. It only toggles which spawn regions appear in the in-game spawn selector.
@@ -86,10 +88,14 @@ curl http://127.0.0.1:3210/api/server/status
 - `repos/Zomboid_Server_Manager_Docker-main/Zomboid_Server_Manager_Docker-main/app/app/Services/ModManager.php`
 - `repos/Zomboid_Server_Manager_Docker-main/Zomboid_Server_Manager_Docker-main/app/resources/js/lib/config-metadata.ts`
 - `repos/zomboid-control-panel-main/zomboid-control-panel-main/server/routes/mods.js`
+- `repos/pz-admin-main/pz-admin-main/rcon.go`
+- `repos/Zomboid_Server_Manager_Docker-main/Zomboid_Server_Manager_Docker-main/app/app/Services/RconClient.php`
+- `repos/Zomboid_Server_Manager_Docker-main/Zomboid_Server_Manager_Docker-main/app/app/Services/OnlinePlayersReader.php`
 
 ## Next Focus
 
 Decide the next slice before implementing:
 
-1. Runtime verification for saved Sandbox settings, likely by evaluating the local `PanelBridge` runtime sandbox introspection approach.
-2. A richer mods slice: Workshop lookup/import, disk detection of multiple Mod IDs, and map-folder handling.
+1. Player administration on top of the Live RCON foundation: guided kick/ban/whitelist/access actions with explicit guardrails.
+2. Runtime verification for saved Sandbox settings, likely by evaluating the local `PanelBridge` runtime sandbox introspection approach.
+3. A richer mods slice: Workshop lookup/import, disk detection of multiple Mod IDs, and map-folder handling.

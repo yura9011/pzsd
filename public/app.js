@@ -7,6 +7,10 @@ const state = {
   modDraft: null,
   spawnData: null,
   spawnOriginal: null,
+  liveStatus: null,
+  livePlayers: null,
+  livePlayersError: null,
+  liveHistory: [],
   pendingChanges: null,
   groupStates: new Map(),
 };
@@ -15,6 +19,7 @@ let isLoginShowing = false;
 
 const elements = {
   settings: document.querySelector('#settings'),
+  saveBar: document.querySelector('#save-bar'),
   editorError: document.querySelector('#editor-error'),
   title: document.querySelector('#file-title'),
   configTools: document.querySelector('#config-tools'),
@@ -171,7 +176,9 @@ async function selectFile(file) {
     await loadMods(true);
   } else if (file === 'spawn' && !state.spawnData) {
     await loadSpawn(true);
-  } else if (file !== 'mods' && file !== 'spawn' && !state.files.has(file)) {
+  } else if (file === 'live' && !state.liveStatus) {
+    await loadLive(true);
+  } else if (file !== 'mods' && file !== 'spawn' && file !== 'live' && !state.files.has(file)) {
     await loadFile(file, true);
   }
 
@@ -226,6 +233,29 @@ async function loadSpawn(forceRender = false) {
   }
 }
 
+async function loadLive(forceRender = false) {
+  state.livePlayersError = null;
+  try {
+    state.liveStatus = await requestJson('/api/live/rcon/status');
+    state.livePlayers = state.liveStatus.ready
+      ? await requestJson('/api/live/players')
+      : null;
+  } catch (error) {
+    state.liveStatus = {
+      available: false,
+      ready: false,
+      error: error.message,
+    };
+    state.livePlayers = null;
+    state.livePlayersError = error.message;
+  }
+
+  if (state.activeFile === 'live' || forceRender) {
+    hideEditorError();
+    renderActiveFile();
+  }
+}
+
 async function reloadActiveSurface() {
   state.pendingChanges = null;
   if (state.activeFile === 'mods') {
@@ -236,6 +266,11 @@ async function reloadActiveSurface() {
 
   if (state.activeFile === 'spawn') {
     await loadSpawn(true);
+    return;
+  }
+
+  if (state.activeFile === 'live') {
+    await loadLive(true);
     return;
   }
 
@@ -253,8 +288,14 @@ function renderActiveFile() {
     return;
   }
 
+  if (state.activeFile === 'live') {
+    renderLive();
+    return;
+  }
+
   const file = state.files.get(state.activeFile);
   elements.search.value = '';
+  elements.saveBar.hidden = false;
   elements.configTools.hidden = false;
   elements.saveNote.textContent = 'Only existing keys are written. Mods use the dedicated editor.';
   if (!file) {
@@ -319,6 +360,7 @@ function groupSettings(file) {
 
 function renderMods() {
   elements.search.value = '';
+  elements.saveBar.hidden = false;
   elements.configTools.hidden = true;
   elements.saveNote.textContent = 'This write updates WorkshopItems and Mods in server.ini together.';
 
@@ -388,6 +430,7 @@ function renderMods() {
 
 function renderSpawn() {
   elements.search.value = '';
+  elements.saveBar.hidden = false;
   elements.configTools.hidden = true;
   elements.saveNote.textContent = 'Uncheck regions to remove them. The file is rewritten with only enabled regions.';
 
@@ -437,6 +480,94 @@ function renderSpawn() {
     });
   }
 
+  updateChangeState();
+}
+
+function renderLive() {
+  elements.search.value = '';
+  elements.saveBar.hidden = true;
+  elements.configTools.hidden = true;
+  elements.title.textContent = 'Live operations';
+  elements.saveNote.textContent = 'Runtime operations use RCON.';
+
+  const status = state.liveStatus;
+  const players = state.livePlayers?.players || [];
+  const playerError = state.livePlayersError || status?.error || '';
+  elements.settings.innerHTML = `
+    <section class="live-shell">
+      <div class="live-grid">
+        <section class="live-panel">
+          <header class="live-panel-heading">
+            <div>
+              <p class="eyebrow">RCON</p>
+              <h3>Runtime</h3>
+            </div>
+            <span class="state-pill" data-state="${status?.ready ? 'online' : 'offline'}">
+              ${status?.ready ? 'Ready' : 'Unavailable'}
+            </span>
+          </header>
+          <p class="live-copy">${escapeHtml(status?.ready ? `Checked ${formatDate(status.checkedAt)}` : playerError || 'Checking RCON state')}</p>
+          <button id="live-refresh" class="quiet-button" type="button">Refresh live state</button>
+        </section>
+
+        <section class="live-panel">
+          <header class="live-panel-heading">
+            <div>
+              <p class="eyebrow">Players</p>
+              <h3>Online</h3>
+            </div>
+            <strong class="live-count">${players.length}</strong>
+          </header>
+          <div class="live-player-list">
+            ${players.length > 0
+              ? players.map((player) => `<span>${escapeHtml(player)}</span>`).join('')
+              : `<p class="empty-state">${escapeHtml(playerError || 'No online players reported.')}</p>`}
+          </div>
+        </section>
+      </div>
+
+      <section class="live-panel live-actions">
+        <header class="live-panel-heading">
+          <div>
+            <p class="eyebrow">Quick actions</p>
+            <h3>Server</h3>
+          </div>
+          <button id="live-save-world" class="primary-button" type="button">Save world</button>
+        </header>
+        <form id="live-broadcast-form" class="live-form">
+          <label for="live-broadcast-message">Broadcast message</label>
+          <div class="live-input-row">
+            <input id="live-broadcast-message" autocomplete="off" maxlength="512" placeholder="Message">
+            <button class="primary-button" type="submit">Send</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="live-panel live-console">
+        <header class="live-panel-heading">
+          <div>
+            <p class="eyebrow">RCON Console</p>
+            <h3>Commands</h3>
+          </div>
+        </header>
+        <form id="live-command-form" class="live-form">
+          <label class="sr-only" for="live-command-input">RCON command</label>
+          <div class="live-input-row">
+            <input id="live-command-input" autocomplete="off" maxlength="1000" placeholder="players">
+            <button class="primary-button" type="submit">Run</button>
+          </div>
+        </form>
+        <div class="live-history">
+          ${renderLiveHistory()}
+        </div>
+      </section>
+    </section>
+  `;
+
+  elements.settings.querySelector('#live-refresh')?.addEventListener('click', () => loadLive(true));
+  elements.settings.querySelector('#live-save-world')?.addEventListener('click', saveLiveWorld);
+  elements.settings.querySelector('#live-command-form')?.addEventListener('submit', sendLiveCommand);
+  elements.settings.querySelector('#live-broadcast-form')?.addEventListener('submit', broadcastLiveMessage);
   updateChangeState();
 }
 
@@ -653,6 +784,12 @@ function collectSpawnChanges() {
 }
 
 function updateChangeState() {
+  if (state.activeFile === 'live') {
+    elements.changeCount.textContent = 'Runtime actions';
+    elements.reviewSave.disabled = true;
+    return;
+  }
+
   const count = Object.keys(collectChanges()).length;
   elements.changeCount.textContent = count === 0
     ? 'No pending changes'
@@ -980,6 +1117,77 @@ async function restartServer() {
   }
 }
 
+async function sendLiveCommand(event) {
+  event.preventDefault();
+  const input = elements.settings.querySelector('#live-command-input');
+  try {
+    const result = await requestJson('/api/live/commands', {
+      method: 'POST',
+      body: JSON.stringify({ command: input?.value || '' }),
+    });
+    addLiveHistory(result);
+    showFlash(`RCON command executed: ${result.command}`, 'ok');
+    renderLive();
+  } catch (error) {
+    showFlash(error.message, 'error');
+  }
+}
+
+async function saveLiveWorld(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  try {
+    const result = await requestJson('/api/live/save', { method: 'POST' });
+    addLiveHistory(result);
+    showFlash('World save command sent.', 'ok');
+    renderLive();
+  } catch (error) {
+    showFlash(error.message, 'error');
+    button.disabled = false;
+  }
+}
+
+async function broadcastLiveMessage(event) {
+  event.preventDefault();
+  const input = elements.settings.querySelector('#live-broadcast-message');
+  try {
+    const result = await requestJson('/api/live/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({ message: input?.value || '' }),
+    });
+    addLiveHistory(result);
+    showFlash('Broadcast command sent.', 'ok');
+    renderLive();
+  } catch (error) {
+    showFlash(error.message, 'error');
+  }
+}
+
+function addLiveHistory(result) {
+  state.liveHistory.unshift({
+    command: result.command,
+    response: result.response,
+    executedAt: result.executedAt,
+  });
+  state.liveHistory = state.liveHistory.slice(0, 20);
+}
+
+function renderLiveHistory() {
+  if (state.liveHistory.length === 0) {
+    return '<p class="empty-state">No commands run in this session.</p>';
+  }
+
+  return state.liveHistory.map((entry) => `
+    <article class="live-history-item">
+      <header>
+        <code>${escapeHtml(entry.command)}</code>
+        <time>${escapeHtml(formatDate(entry.executedAt))}</time>
+      </header>
+      <pre>${escapeHtml(entry.response || '(no response)')}</pre>
+    </article>
+  `).join('');
+}
+
 function readControlValue(control, meta) {
   if (meta.type === 'boolean') {
     return control.checked;
@@ -1019,7 +1227,7 @@ function applySearch() {
 }
 
 function setAllGroupsOpen(open) {
-  if (state.activeFile === 'mods') {
+  if (state.activeFile === 'mods' || state.activeFile === 'live') {
     return;
   }
 
@@ -1159,7 +1367,7 @@ function sameList(left, right) {
 
 function backupFileForSurface(surface) {
   if (surface === 'mods') return 'ini';
-  if (surface === 'spawn') return null;
+  if (surface === 'spawn' || surface === 'live') return null;
   return surface;
 }
 

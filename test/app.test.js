@@ -6,6 +6,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { createApp } from '../src/app.js';
 import { ConfigFileService } from '../src/lib/config-file-service.js';
+import { LiveRconService } from '../src/lib/live-rcon-service.js';
 
 const TEST_AUTH = { username: 'panel-test', password: 'panel-password' };
 
@@ -184,6 +185,79 @@ test('auth sessions expire by TTL and logout invalidates tokens', async (t) => {
     headers: authHeaders(logoutToken),
   });
   assert.equal(loggedOut.status, 401);
+});
+
+test('live API reports RCON state, players, commands, save, and broadcast', async (t) => {
+  const commands = [];
+  const app = createApp({
+    auth: TEST_AUTH,
+    configFiles: {},
+    systemd: {},
+    live: new LiveRconService({
+      rcon: {
+        isConfigured() {
+          return true;
+        },
+        async status() {},
+        async execute(command) {
+          commands.push(command);
+          return command === 'players'
+            ? 'Players connected (2):\n-Alex\n-Sam\n'
+            : `ran ${command}`;
+        },
+      },
+      clock: () => new Date('2026-05-21T19:30:00.000Z'),
+    }),
+  });
+  const api = await listen(t, app);
+
+  const unauthorized = await fetch(`${api}/api/live/rcon/status`);
+  assert.equal(unauthorized.status, 401);
+
+  const token = await login(api);
+  const status = await fetch(`${api}/api/live/rcon/status`, {
+    headers: authHeaders(token),
+  }).then((response) => response.json());
+  assert.equal(status.ready, true);
+
+  const players = await fetch(`${api}/api/live/players`, {
+    headers: authHeaders(token),
+  }).then((response) => response.json());
+  assert.deepEqual(players.players, ['Alex', 'Sam']);
+  assert.equal(players.count, 2);
+
+  const invalidCommand = await fetch(`${api}/api/live/commands`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify({ command: 'save\nquit' }),
+  });
+  assert.equal(invalidCommand.status, 400);
+
+  const command = await fetch(`${api}/api/live/commands`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify({ command: 'help' }),
+  }).then((response) => response.json());
+  assert.equal(command.response, 'ran help');
+
+  const save = await fetch(`${api}/api/live/save`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  }).then((response) => response.json());
+  assert.equal(save.command, 'save');
+
+  const broadcast = await fetch(`${api}/api/live/broadcast`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify({ message: 'Be ready "now"' }),
+  }).then((response) => response.json());
+  assert.equal(broadcast.message, 'Be ready "now"');
+  assert.deepEqual(commands, [
+    'players',
+    'help',
+    'save',
+    'servermsg "Be ready \\"now\\""',
+  ]);
 });
 
 async function listen(t, app) {

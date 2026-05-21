@@ -30,16 +30,31 @@ export function readRuntimeConfig(env = process.env) {
     systemdUnit,
     username,
     password,
+    rcon: {
+      host: env.PZ_RCON_HOST || '127.0.0.1',
+      port: parsePort(env.PZ_RCON_PORT || '27015', 'PZ_RCON_PORT'),
+      password: env.PZ_RCON_PASSWORD || '',
+      timeoutMs: parseTimeout(env.PZ_RCON_TIMEOUT_MS || '5000'),
+    },
   };
 }
 
-function parsePort(value) {
+function parsePort(value, name = 'PANEL_PORT') {
   const port = Number(value);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error('PANEL_PORT must be an integer between 1 and 65535.');
+    throw new Error(`${name} must be an integer between 1 and 65535.`);
   }
 
   return port;
+}
+
+function parseTimeout(value) {
+  const timeoutMs = Number(value);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30000) {
+    throw new Error('PZ_RCON_TIMEOUT_MS must be an integer between 100 and 30000.');
+  }
+
+  return timeoutMs;
 }
 
 function readPanelUsername(env) {
