@@ -16,7 +16,7 @@ export function readRuntimeConfig(env = process.env) {
     throw new Error('PZ_SYSTEMD_UNIT must be a valid .service unit name.');
   }
 
-  const username = env.PANEL_USERNAME || 'admin';
+  const username = readPanelUsername(env);
   const password = env.PANEL_PASSWORD;
 
   return {
@@ -40,4 +40,13 @@ function parsePort(value) {
   }
 
   return port;
+}
+
+function readPanelUsername(env) {
+  if (env.PANEL_USERNAME) {
+    return env.PANEL_USERNAME;
+  }
+
+  console.warn('PANEL_USERNAME is not set. Falling back to admin for V1.');
+  return 'admin';
 }

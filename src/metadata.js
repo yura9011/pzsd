@@ -658,6 +658,7 @@ export function metadataForSettings(kind, settings) {
       group: known.group || inferGroup(kind, key),
       description: known.description || defaultDescription(key),
       type: inferredType,
+      known: Boolean(catalog[key]),
       sensitive,
       readOnly,
       options: known.options,

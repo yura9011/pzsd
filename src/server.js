@@ -3,6 +3,11 @@ import { readRuntimeConfig } from './config.js';
 import { ConfigFileService } from './lib/config-file-service.js';
 import { SystemdService } from './lib/systemd-service.js';
 
+if (!process.env.PANEL_PASSWORD) {
+  console.error('PANEL_PASSWORD is not set. Refusing to start without authentication.');
+  process.exit(1);
+}
+
 const runtime = readRuntimeConfig();
 const app = createApp({
   configFiles: new ConfigFileService(runtime),

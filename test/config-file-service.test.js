@@ -54,6 +54,11 @@ test('config service refuses new keys, read-only mods, newline injection, and st
     (error) => error.status === 400 && /invalid config characters/.test(error.message),
   );
 
+  await assert.rejects(
+    service.save('ini', { revision: loaded.revision, changes: { MaxPlayers: 'many' } }),
+    (error) => error.status === 400 && /finite number/.test(error.message),
+  );
+
   await fs.appendFile(path.join(env.configDir, 'servertest.ini'), '\nConcurrentEdit=true\n');
   await assert.rejects(
     service.save('ini', { revision: loaded.revision, changes: { MaxPlayers: '24' } }),
@@ -191,6 +196,22 @@ test('config service updates nested sandbox entries without writing new paths', 
       changes: { 'Unknown.Section': 'value' },
     }),
     (error) => error.status === 400 && /does not exist/.test(error.message),
+  );
+
+  await assert.rejects(
+    service.save('sandbox', {
+      revision: saved.revision,
+      changes: { 'ZombieLore.Speed': '99' },
+    }),
+    (error) => error.status === 400 && /supported values/.test(error.message),
+  );
+
+  await assert.rejects(
+    service.save('sandbox', {
+      revision: saved.revision,
+      changes: { StarterKit: 'yes' },
+    }),
+    (error) => error.status === 400 && /boolean/.test(error.message),
   );
 });
 

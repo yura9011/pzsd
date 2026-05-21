@@ -8,50 +8,55 @@ const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultPublicDir = path.resolve(currentDir, '../public');
 
 export function createApp({ configFiles, systemd, auth, publicDir = defaultPublicDir }) {
+  if (!auth || typeof auth.password !== 'string' || auth.password === '') {
+    throw new Error('Panel auth configuration must include a password.');
+  }
+
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '128kb' }));
 
   const sessions = new Map();
+  const sessionTtlMs = readSessionTtlMs(process.env);
 
   function requireAuth(req, res, next) {
-    if (!auth) {
-      return next();
-    }
-
     const header = req.headers.authorization;
     if (!header || !header.startsWith('Bearer ')) {
       return next(new HttpError(401, 'Authentication required.'));
     }
 
     const token = header.slice(7);
-    if (!sessions.has(token)) {
+    const session = sessions.get(token);
+    if (!session) {
+      return next(new HttpError(401, 'Invalid or expired token.'));
+    }
+
+    if (Date.now() - session.createdAt > sessionTtlMs) {
+      sessions.delete(token);
       return next(new HttpError(401, 'Invalid or expired token.'));
     }
 
     next();
   }
 
-  if (auth) {
-    app.post('/api/auth/login', route(async (req, res) => {
-      const { username, password } = req.body || {};
-      if (username !== auth.username || password !== auth.password) {
-        throw new HttpError(401, 'Invalid username or password.');
-      }
+  app.post('/api/auth/login', route(async (req, res) => {
+    const { username, password } = req.body || {};
+    if (username !== auth.username || password !== auth.password) {
+      throw new HttpError(401, 'Invalid username or password.');
+    }
 
-      const token = crypto.randomUUID();
-      sessions.set(token, { username, createdAt: Date.now() });
-      res.json({ token });
-    }));
+    const token = crypto.randomUUID();
+    sessions.set(token, { username, createdAt: Date.now() });
+    res.json({ token });
+  }));
 
-    app.post('/api/auth/logout', route(async (req, res) => {
-      const header = req.headers.authorization;
-      if (header?.startsWith('Bearer ')) {
-        sessions.delete(header.slice(7));
-      }
-      res.json({ ok: true });
-    }));
-  }
+  app.post('/api/auth/logout', route(async (req, res) => {
+    const header = req.headers.authorization;
+    if (header?.startsWith('Bearer ')) {
+      sessions.delete(header.slice(7));
+    }
+    res.json({ ok: true });
+  }));
 
   app.get('/api/auth/check', requireAuth, route(async (_req, res) => {
     res.json({ ok: true });
@@ -62,6 +67,7 @@ export function createApp({ configFiles, systemd, auth, publicDir = defaultPubli
   }));
 
   app.patch('/api/config/ini', requireAuth, route(async (req, res) => {
+    validateConfigPatchChanges(req.body);
     res.json(await configFiles.save('ini', req.body));
   }));
 
@@ -70,6 +76,7 @@ export function createApp({ configFiles, systemd, auth, publicDir = defaultPubli
   }));
 
   app.patch('/api/config/sandbox', requireAuth, route(async (req, res) => {
+    validateConfigPatchChanges(req.body);
     res.json(await configFiles.save('sandbox', req.body));
   }));
 
@@ -134,4 +141,39 @@ export function createApp({ configFiles, systemd, auth, publicDir = defaultPubli
 
 function route(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
+}
+
+function readSessionTtlMs(env) {
+  const ttlHours = Number(env.SESSION_TTL_HOURS ?? 8);
+  if (!Number.isFinite(ttlHours) || ttlHours < 0) {
+    return 8 * 60 * 60 * 1000;
+  }
+
+  return ttlHours * 60 * 60 * 1000;
+}
+
+function validateConfigPatchChanges(payload) {
+  if (!isPlainRecord(payload?.changes)) {
+    throw new HttpError(400, 'changes must be an object keyed by existing settings.');
+  }
+
+  for (const [key, value] of Object.entries(payload.changes)) {
+    const stringValue = String(value);
+    if (stringValue.length > 512) {
+      throw new HttpError(400, `${key} exceeds the maximum config value length.`);
+    }
+
+    if (/[\u0000-\u001f\u007f]/.test(stringValue)) {
+      throw new HttpError(400, `${key} contains unsafe control characters.`);
+    }
+  }
+}
+
+function isPlainRecord(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === null || Object.prototype.toString.call(value) === '[object Object]';
 }

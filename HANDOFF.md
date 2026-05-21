@@ -29,13 +29,13 @@ The panel ships with a curated metadata catalog covering ~110 INI settings and ~
 - Require diff review before save.
 - Create and restore per-file config backups with last-20 retention.
 - Reject stale browser revisions and unsafe config values.
-- Require login through a Bearer token session when `PANEL_PASSWORD` is set.
+- Require login through a Bearer token session and refuse startup without `PANEL_PASSWORD`.
 - Report `Online` when the configured systemd unit is `active / running`.
 - Restart only the configured game service through the narrow sudoers path.
 
 ## Known Boundaries
 
-- Auth uses in-memory sessions. Panels restart loses all active sessions, requiring re-login. No session expiry beyond server restart.
+- Auth uses in-memory sessions. Panel restart loses all active sessions, requiring re-login. Sessions expire after `SESSION_TTL_HOURS` hours, defaulting to 8.
 - The panel has no HTTPS. Use a reverse proxy (nginx, Cloudflare Tunnel) for encrypted transport in production.
 - The panel reads and writes disk config. It does not yet prove the running game has loaded a saved Sandbox value.
 - The mods surface writes only `Mods` and `WorkshopItems`; map mods can still require a separate `Map` edit.

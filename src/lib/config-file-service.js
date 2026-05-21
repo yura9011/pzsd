@@ -310,9 +310,11 @@ export class ConfigFileService {
         throw new HttpError(400, `${key} is read-only in this panel version.`);
       }
 
-      changes[key] = kind === 'ini'
+      const normalized = kind === 'ini'
         ? normalizeIniChange(value, key)
         : normalizeSandboxChange(value, entry);
+      validateKnownChangeValue(key, value, metadata[key]);
+      changes[key] = normalized;
     }
 
     return changes;
@@ -446,6 +448,36 @@ function normalizeModList(rawItems, key) {
 
 function sameList(left, right) {
   return left.length === right.length && left.every((item, index) => item === right[index]);
+}
+
+function validateKnownChangeValue(key, value, metadata) {
+  if (!metadata?.known) {
+    return;
+  }
+
+  if (metadata.type === 'boolean' && !isBooleanChange(value)) {
+    throw new HttpError(400, `${key} must be a boolean.`);
+  }
+
+  if (metadata.type === 'number' && !isFiniteNumericChange(value)) {
+    throw new HttpError(400, `${key} must be a finite number.`);
+  }
+
+  if (metadata.type === 'enum' && !metadata.options?.some((option) => option.value === String(value))) {
+    throw new HttpError(400, `${key} must be one of the supported values.`);
+  }
+}
+
+function isBooleanChange(value) {
+  return value === true || value === false || value === 'true' || value === 'false';
+}
+
+function isFiniteNumericChange(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value);
+  }
+
+  return typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value));
 }
 
 function maskSensitiveValues(settings, metadata) {

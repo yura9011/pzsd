@@ -32,7 +32,7 @@ Verified VPS baseline on May 21, 2026:
 - Keeps unknown settings visible with auto-generated descriptive labels.
 - Saves only existing keys after a diff review.
 - Masks password-like values on read.
-- Requires login when `PANEL_PASSWORD` is set in the environment.
+- Requires login and refuses to start without `PANEL_PASSWORD`.
 - Manages existing `WorkshopItems` and `Mods` lines through a dedicated manual list editor with separate Workshop IDs and Mod IDs.
 - Manages spawn regions through a dedicated Spawn tab — reads `<server>_spawnregions.lua`, shows all regions with checkboxes, rewrites the file with only enabled regions to control which spawn options appear in-game.
 - Creates per-file backups before saves and restores, with last-20 retention.
@@ -72,10 +72,11 @@ The server reads settings from environment variables. Defaults are localhost-onl
 | `PZ_SERVER_NAME` | `servertest` | Single server profile name |
 | `PZ_PANEL_BACKUP_DIR` | `<PZ_CONFIG_DIR>/.pz-config-panel-backups` | Config backup directory |
 | `PZ_SYSTEMD_UNIT` | `project-zomboid.service` | PZ server system unit to inspect and restart |
-| `PANEL_USERNAME` | `admin` | Login username |
+| `PANEL_USERNAME` | `admin` fallback with warning | Login username |
 | `PANEL_PASSWORD` | *(required)* | Login password |
+| `SESSION_TTL_HOURS` | `8` | Bearer token session lifetime in hours |
 
-When `PANEL_PASSWORD` is set, the panel requires a login. All API routes are protected with a Bearer token session. The login page is shown on first visit. Without `PANEL_PASSWORD`, auth is disabled.
+The panel requires a login. All API routes are protected with a Bearer token session except the login endpoint. `PANEL_PASSWORD` is required at startup; if `PANEL_USERNAME` is omitted, V1 logs a warning and falls back to `admin`.
 
 ## VPS Deployment
 
@@ -109,7 +110,7 @@ Useful VPS checks:
 ```bash
 sudo systemctl status project-zomboid.service --no-pager
 sudo systemctl status pz-config-panel.service --no-pager
-# API calls now need a token (except via SSH tunnel on 127.0.0.1 without PANEL_PASSWORD):
+# API calls need a token:
 curl -H 'Authorization: Bearer <token>' http://127.0.0.1:3210/api/server/status
 ```
 
