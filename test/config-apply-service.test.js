@@ -45,6 +45,26 @@ test('apply status infers restart loading for disk-backed surfaces', async (t) =
   assert.equal(spawn.state, 'runtime_unknown');
 });
 
+test('INI apply status avoids RCON work until live apply is requested', async (t) => {
+  const { configFiles } = await createConfigFiles(t);
+  const service = new ConfigApplyService({
+    configFiles,
+    systemd: statusSystemd(() => '2026-05-21T20:30:00.000Z'),
+    live: {
+      async status() {
+        throw new Error('status should not run during status reads');
+      },
+      async execute() {
+        throw new Error('showoptions should not run during status reads');
+      },
+    },
+  });
+
+  const status = await service.status('ini');
+  assert.equal(status.canApplyLive, true);
+  assert.equal(status.comparison, undefined);
+});
+
 test('INI runtime comparison parses showoptions and skips sensitive mismatches', async (t) => {
   const { configFiles } = await createConfigFiles(t);
   const snapshot = await configFiles.readApplySnapshot('ini');

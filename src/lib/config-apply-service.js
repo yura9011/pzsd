@@ -14,11 +14,7 @@ export class ConfigApplyService {
     assertSurface(surface);
     const snapshot = await this.configFiles.readApplySnapshot(surface);
     const service = await this.systemd.status();
-    const runtime = surface === 'ini'
-      ? await this.readIniRuntime(snapshot)
-      : unavailableRuntime();
-
-    return applicationStatus(snapshot, service, runtime);
+    return applicationStatus(snapshot, service, unavailableRuntime());
   }
 
   async applyIni(payload) {
@@ -129,7 +125,7 @@ function applicationStatus(snapshot, service, runtime) {
       online: Boolean(service.online),
       activeSince: service.activeSince || null,
     },
-    canApplyLive: snapshot.surface === 'ini' && Boolean(runtime.ready),
+    canApplyLive: snapshot.surface === 'ini',
     canRestart: Boolean(service.available),
     ...(runtimeComparison ? { comparison: publicComparison(runtimeComparison) } : {}),
   };
