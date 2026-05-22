@@ -88,6 +88,32 @@ sudo systemctl status pz-config-panel.service --no-pager
 curl http://127.0.0.1:3210/api/server/status
 ```
 
+## May 22 Recovery Note
+
+The first VPS Workshop smoke installed Workshop item `3669550831` with Mod ID
+`ProximityInventory`. The reviewed INI apply wrote:
+
+```ini
+WorkshopItems=3669550831
+Mods=ProximityInventory
+Map=Muldraugh, KY
+```
+
+The panel stayed up after that apply, but the game service did not survive the
+restart. The game start log failed with `Failed to find class:
+zombie/network/GameServer`; `/home/steam/pz_server/java/projectzomboid.jar` was
+an empty 22-byte ZIP with an earlier May 21 timestamp, and the already-running
+Java process had logged missing-class failures before the Workshop restart.
+
+Recovery revalidated Steam app `380870` in the current `unstable` branch with
+SteamCMD, restored `projectzomboid.jar` to about 61 MB, and started
+`project-zomboid.service` again. The repaired start reached `*** SERVER STARTED
+****`, loaded Workshop item `3669550831` as `Ready`, exposed UDP `16261` and
+`16262`, and listened for RCON on `27015`. See
+`deploy/PZ_SERVER_RECOVERY.md` for the repeatable checks and recovery commands.
+Treat public server monitors as delayed evidence after a restart; verify the VPS
+service, game log, and listening ports first.
+
 ## Source References Used
 
 - `repos/pzserver-gui-master/pzserver-gui-master/app/services/file_manager.py`

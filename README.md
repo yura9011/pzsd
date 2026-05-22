@@ -127,6 +127,13 @@ sudo systemctl status pz-config-panel.service --no-pager
 curl -H 'Authorization: Bearer <token>' http://127.0.0.1:3210/api/server/status
 ```
 
+Operational runbooks:
+
+- [`deploy/VPS_UPDATE.md`](deploy/VPS_UPDATE.md) for publishing a panel commit
+  without clobbering local VPS files.
+- [`deploy/PZ_SERVER_RECOVERY.md`](deploy/PZ_SERVER_RECOVERY.md) when the panel
+  is reachable but the Project Zomboid service does not survive a restart.
+
 ## Access
 
 The panel binds to `0.0.0.0` by default so you can reach it at `http://your-vps-ip:3210` directly. A login page protects the panel — set `PANEL_USERNAME` and `PANEL_PASSWORD` in the environment.

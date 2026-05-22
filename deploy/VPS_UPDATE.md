@@ -36,3 +36,7 @@ ssh root@<vps-host> 'curl -I -sS http://127.0.0.1:3210/'
 
 Restart `project-zomboid.service` only when a game-server change requires it or
 the user explicitly asks for it.
+
+If the panel update works but the game server does not survive a later config or
+Workshop restart, use [`PZ_SERVER_RECOVERY.md`](PZ_SERVER_RECOVERY.md) before
+changing game config by hand.
