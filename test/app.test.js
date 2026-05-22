@@ -159,6 +159,67 @@ test('spawn API returns default regions without file and saves enabled-only regi
   assert.equal(typeof reloaded.revision, 'string');
 });
 
+test('Workshop mod install API stays authenticated and dispatches install operations', async (t) => {
+  const calls = [];
+  const app = createApp({
+    auth: TEST_AUTH,
+    configFiles: {},
+    systemd: {},
+    modInstaller: {
+      async start(input) {
+        calls.push(['start', input]);
+        return { id: 'op-1', phase: 'downloading', rootWorkshopId: '700' };
+      },
+      async status(id) {
+        calls.push(['status', id]);
+        return { id, phase: 'select_mods' };
+      },
+      async resolveDependencies(id, payload) {
+        calls.push(['dependencies', id, payload.selectedModIds]);
+        return { id, phase: 'ready_to_apply' };
+      },
+      async apply(id, payload) {
+        calls.push(['apply', id, payload.revision]);
+        return { id, phase: 'complete' };
+      },
+    },
+  });
+  const api = await listen(t, app);
+
+  assert.equal((await fetch(`${api}/api/mods/install`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ input: '700' }),
+  })).status, 401);
+
+  const token = await login(api);
+  const started = await fetch(`${api}/api/mods/install`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify({ input: '700' }),
+  });
+  assert.equal(started.status, 202);
+
+  await fetch(`${api}/api/mods/install/op-1`, { headers: authHeaders(token) });
+  await fetch(`${api}/api/mods/install/op-1/dependencies`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify({ selectedModIds: ['ParentMod'] }),
+  });
+  await fetch(`${api}/api/mods/install/op-1/apply`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify({ revision: 'rev-1' }),
+  });
+
+  assert.deepEqual(calls, [
+    ['start', '700'],
+    ['status', 'op-1'],
+    ['dependencies', 'op-1', ['ParentMod']],
+    ['apply', 'op-1', 'rev-1'],
+  ]);
+});
+
 test('auth sessions expire by TTL and logout invalidates tokens', async (t) => {
   const previousTtl = process.env.SESSION_TTL_HOURS;
   t.after(() => restoreEnv('SESSION_TTL_HOURS', previousTtl));

@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node --test test/app.test.js test/config-apply-service.test.js test/config-file-service.test.js test/parsers.test.js test/rcon-service.test.js test/server-startup.test.js test/systemd-service.test.js"
+    "test": "node --test test/app.test.js test/config-apply-service.test.js test/config-file-service.test.js test/parsers.test.js test/rcon-service.test.js test/server-startup.test.js test/systemd-service.test.js test/workshop-mod-install-service.test.js"
   },
   "engines": {
     "node": ">=18"

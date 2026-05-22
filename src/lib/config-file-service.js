@@ -125,6 +125,8 @@ export class ConfigFileService {
       revision: revisionForContent(content),
       workshopItems: parseModSetting(parsed.settings.WorkshopItems),
       mods: parseModSetting(parsed.settings.Mods),
+      maps: parseModSetting(parsed.settings.Map),
+      hasMapEntry: Boolean(parsed.entries.Map),
       restartRequired: false,
     };
   }
@@ -142,8 +144,12 @@ export class ConfigFileService {
 
     const nextWorkshopItems = normalizeModList(payload.workshopItems, 'WorkshopItems');
     const nextMods = normalizeModList(payload.mods, 'Mods');
+    const nextMaps = payload.maps === undefined
+      ? null
+      : normalizeModList(payload.maps, 'Map');
     const currentWorkshopItems = parseModSetting(parsed.settings.WorkshopItems);
     const currentMods = parseModSetting(parsed.settings.Mods);
+    const currentMaps = parseModSetting(parsed.settings.Map);
     const changes = {};
 
     if (!sameList(nextWorkshopItems, currentWorkshopItems)) {
@@ -152,6 +158,16 @@ export class ConfigFileService {
 
     if (!sameList(nextMods, currentMods)) {
       changes.Mods = normalizeIniChange(nextMods.join(';'), 'Mods');
+    }
+
+    if (nextMaps !== null) {
+      if (!parsed.entries.Map) {
+        throw new HttpError(400, 'server.ini must already contain Map before the mods installer can add map folders.');
+      }
+
+      if (!sameList(nextMaps, currentMaps)) {
+        changes.Map = normalizeIniChange(nextMaps.join(';'), 'Map');
+      }
     }
 
     const changedKeys = Object.keys(changes);
@@ -457,6 +473,7 @@ function assertModsPayload(payload) {
     || typeof payload.revision !== 'string'
     || !Array.isArray(payload.workshopItems)
     || !Array.isArray(payload.mods)
+    || (payload.maps !== undefined && !Array.isArray(payload.maps))
   ) {
     throw new HttpError(400, 'Mods save payload must include revision, workshopItems, and mods lists.');
   }

@@ -575,6 +575,174 @@ dialog::backdrop {
   padding: 1rem;
 }
 
+.mod-installer,
+.mod-advanced {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  min-width: 0;
+}
+
+.mod-installer {
+  display: grid;
+  gap: 0.85rem;
+  padding: 0.9rem;
+}
+
+.mod-install-heading,
+.mod-install-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.mod-install-heading h3,
+.mod-install-step h4 {
+  font-size: 1rem;
+  margin-bottom: 0;
+}
+
+.mod-install-copy,
+.mod-install-step p,
+.mod-install-review-row small {
+  color: var(--muted);
+  line-height: 1.4;
+  margin-bottom: 0;
+}
+
+.mod-install-form,
+.mod-install-step,
+.mod-install-dependencies,
+.mod-install-review-row {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.mod-install-form label {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.mod-install-input-row {
+  align-items: center;
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.mod-install-step {
+  border-top: 1px solid var(--line);
+  padding-top: 0.85rem;
+}
+
+.mod-install-options {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.mod-install-option,
+.mod-install-dependency {
+  align-items: center;
+  background: #161b18;
+  border: 1px solid var(--line);
+  display: grid;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.65rem;
+}
+
+.mod-install-option {
+  cursor: pointer;
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.mod-install-dependency {
+  grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1fr);
+}
+
+.mod-install-option input {
+  accent-color: var(--green);
+  min-height: auto;
+  width: auto;
+}
+
+.mod-install-option strong,
+.mod-install-dependency strong,
+.mod-install-option code,
+.mod-install-dependency small {
+  display: block;
+}
+
+.mod-install-option small,
+.mod-install-dependency small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.2rem;
+}
+
+.mod-install-review-row {
+  background: #161b18;
+  border: 1px solid var(--line);
+  min-width: 0;
+  padding: 0.65rem;
+}
+
+.mod-install-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.mod-install-tags span {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  padding: 0.38rem 0.5rem;
+}
+
+.mod-install-error {
+  background: #311b1a;
+  border: 1px solid var(--red);
+  padding: 0.65rem;
+}
+
+.mod-advanced summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 0.65rem;
+  justify-content: space-between;
+  list-style: none;
+  padding: 0.85rem;
+}
+
+.mod-advanced summary::-webkit-details-marker {
+  display: none;
+}
+
+.mod-advanced summary::before {
+  color: var(--muted);
+  content: ">";
+  transform: rotate(0deg);
+}
+
+.mod-advanced[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.mod-advanced summary strong {
+  margin-right: auto;
+}
+
+.mod-advanced summary span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.mod-advanced .mod-warning,
+.mod-advanced .mod-list-grid {
+  margin: 0 0.85rem 0.85rem;
+}
+
 .mod-warning {
   background: #2e2414;
   border: 1px solid #7b5f2b;
@@ -863,6 +1031,8 @@ dialog::backdrop {
   .setting,
   .live-grid,
   .live-input-row,
+  .mod-install-input-row,
+  .mod-install-dependency,
   .mod-list-grid,
   .mod-item,
   .diff-row {

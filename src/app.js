@@ -7,7 +7,7 @@ import { HttpError } from './lib/http-error.js';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultPublicDir = path.resolve(currentDir, '../public');
 
-export function createApp({ configFiles, systemd, live, configApply, auth, publicDir = defaultPublicDir }) {
+export function createApp({ configFiles, systemd, live, configApply, modInstaller, auth, publicDir = defaultPublicDir }) {
   if (!auth || typeof auth.password !== 'string' || auth.password === '') {
     throw new Error('Panel auth configuration must include a password.');
   }
@@ -94,6 +94,22 @@ export function createApp({ configFiles, systemd, live, configApply, auth, publi
 
   app.patch('/api/mods', requireAuth, route(async (req, res) => {
     res.json(await configFiles.saveMods(req.body));
+  }));
+
+  app.post('/api/mods/install', requireAuth, route(async (req, res) => {
+    res.status(202).json(await requiredInstaller(modInstaller).start(req.body?.input));
+  }));
+
+  app.get('/api/mods/install/:operationId', requireAuth, route(async (req, res) => {
+    res.json(await requiredInstaller(modInstaller).status(req.params.operationId));
+  }));
+
+  app.post('/api/mods/install/:operationId/dependencies', requireAuth, route(async (req, res) => {
+    res.json(await requiredInstaller(modInstaller).resolveDependencies(req.params.operationId, req.body || {}));
+  }));
+
+  app.post('/api/mods/install/:operationId/apply', requireAuth, route(async (req, res) => {
+    res.json(await requiredInstaller(modInstaller).apply(req.params.operationId, req.body || {}));
   }));
 
   app.get('/api/config/spawn', requireAuth, route(async (_req, res) => {
@@ -195,6 +211,14 @@ function validateConfigPatchChanges(payload) {
       throw new HttpError(400, `${key} contains unsafe control characters.`);
     }
   }
+}
+
+function requiredInstaller(modInstaller) {
+  if (!modInstaller) {
+    throw new HttpError(503, 'Workshop mod installer is not configured.');
+  }
+
+  return modInstaller;
 }
 
 function isPlainRecord(value) {

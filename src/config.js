@@ -5,6 +5,7 @@ const SYSTEMD_UNIT_PATTERN = /^[A-Za-z0-9_.@:-]+\.service$/;
 
 export function readRuntimeConfig(env = process.env) {
   const configDir = path.resolve(env.PZ_CONFIG_DIR || '/home/steam/Zomboid/Server');
+  const serverDir = path.resolve(env.PZ_SERVER_DIR || '/home/steam/pz_server');
   const serverName = env.PZ_SERVER_NAME || 'servertest';
   const systemdUnit = env.PZ_SYSTEMD_UNIT || 'project-zomboid.service';
 
@@ -23,6 +24,8 @@ export function readRuntimeConfig(env = process.env) {
     host: env.PANEL_HOST || '0.0.0.0',
     port: parsePort(env.PANEL_PORT || '3210'),
     configDir,
+    serverDir,
+    steamcmdPath: path.resolve(env.PZ_STEAMCMD_PATH || '/usr/games/steamcmd'),
     serverName,
     backupDir: path.resolve(
       env.PZ_PANEL_BACKUP_DIR || path.join(configDir, '.pz-config-panel-backups'),

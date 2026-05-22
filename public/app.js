@@ -5,6 +5,7 @@ const state = {
   files: new Map(),
   mods: null,
   modDraft: null,
+  modInstall: null,
   spawnData: null,
   spawnOriginal: null,
   liveStatus: null,
@@ -17,6 +18,7 @@ const state = {
 };
 
 let isLoginShowing = false;
+let modInstallPollTimer = null;
 
 const elements = {
   settings: document.querySelector('#settings'),
@@ -403,26 +405,52 @@ function renderMods() {
   elements.title.textContent = `${state.mods.filename} mods`;
   elements.settings.innerHTML = `
     <section class="mods-editor">
-      <div class="mod-warning">
-        <strong>Map mods need a separate check.</strong>
-        <span>This editor writes only WorkshopItems and Mods. Update Map separately when a mod requires map folders.</span>
-      </div>
-      <div class="mod-list-grid">
-        ${modListEditor(
-          'workshopItems',
-          'Workshop IDs',
-          'Steam Workshop items the server downloads.',
-          state.modDraft.workshopItems,
-        )}
-        ${modListEditor(
-          'mods',
-          'Mod IDs',
-          'Project Zomboid mod IDs the server loads.',
-          state.modDraft.mods,
-        )}
-      </div>
+      ${modInstallPanel()}
+      <details class="mod-advanced">
+        <summary>
+          <strong>Advanced list editor</strong>
+          <span>Manual WorkshopItems and Mods fallback</span>
+        </summary>
+        <div class="mod-warning">
+          <strong>Manual edits need a separate map check.</strong>
+          <span>This advanced editor writes only WorkshopItems and Mods. Use the installer above when map folders or dependencies need inspection.</span>
+        </div>
+        <div class="mod-list-grid">
+          ${modListEditor(
+            'workshopItems',
+            'Workshop IDs',
+            'Steam Workshop items the server downloads.',
+            state.modDraft.workshopItems,
+          )}
+          ${modListEditor(
+            'mods',
+            'Mod IDs',
+            'Project Zomboid mod IDs the server loads.',
+            state.modDraft.mods,
+          )}
+        </div>
+      </details>
     </section>
   `;
+
+  const installForm = elements.settings.querySelector('#mod-install-form');
+  installForm?.addEventListener('submit', startModInstall);
+
+  for (const button of elements.settings.querySelectorAll('[data-install-reset]')) {
+    button.addEventListener('click', resetModInstall);
+  }
+
+  for (const button of elements.settings.querySelectorAll('[data-install-resolve]')) {
+    button.addEventListener('click', resolveModInstallSelection);
+  }
+
+  for (const button of elements.settings.querySelectorAll('[data-install-dependencies]')) {
+    button.addEventListener('click', resolveModInstallDependencies);
+  }
+
+  for (const button of elements.settings.querySelectorAll('[data-install-apply]')) {
+    button.addEventListener('click', applyModInstall);
+  }
 
   for (const input of elements.settings.querySelectorAll('[data-mod-value]')) {
     input.addEventListener('input', () => {
@@ -455,6 +483,7 @@ function renderMods() {
   }
 
   updateChangeState();
+  scheduleModInstallPoll();
 }
 
 function renderSpawn() {
@@ -657,6 +686,397 @@ function modListEditor(listName, title, description, values) {
       </div>
     </section>
   `;
+}
+
+function modInstallPanel() {
+  const operation = state.modInstall;
+  if (!operation) {
+    return `
+      <section class="mod-installer">
+        <header class="mod-install-heading">
+          <div>
+            <p class="eyebrow">Workshop installer</p>
+            <h3>Add functional mod</h3>
+          </div>
+          <span class="state-pill" data-state="pending">Idle</span>
+        </header>
+        <form id="mod-install-form" class="mod-install-form">
+          <label for="mod-install-input">Steam Workshop URL or ID</label>
+          <div class="mod-install-input-row">
+            <input id="mod-install-input" autocomplete="off" placeholder="https://steamcommunity.com/sharedfiles/filedetails/?id=...">
+            <button class="primary-button" type="submit">Download and inspect</button>
+          </div>
+        </form>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="mod-installer">
+      <header class="mod-install-heading">
+        <div>
+          <p class="eyebrow">Workshop installer</p>
+          <h3>Workshop ${escapeHtml(operation.rootWorkshopId)}</h3>
+        </div>
+        <span class="state-pill" data-state="${modInstallTone(operation.phase)}">${escapeHtml(modInstallPhase(operation.phase))}</span>
+      </header>
+      ${operation.error ? modInstallError(operation.error.message) : ''}
+      ${operation.lastError ? modInstallError(operation.lastError.message) : ''}
+      ${modInstallRootSelection(operation)}
+      ${modInstallMissingDependencies(operation)}
+      ${modInstallReview(operation)}
+      ${modInstallResult(operation)}
+      ${['complete', 'failed'].includes(operation.phase)
+        ? '<div class="mod-install-actions"><button class="quiet-button" data-install-reset type="button">New install</button></div>'
+        : ''}
+    </section>
+  `;
+}
+
+function modInstallRootSelection(operation) {
+  if (!operation.rootItem) {
+    return '<p class="mod-install-copy">SteamCMD is downloading and the panel will inspect the downloaded mod metadata next.</p>';
+  }
+
+  const selectable = operation.phase === 'select_mods'
+    || operation.phase === 'needs_dependency_input'
+    || operation.phase === 'ready_to_apply';
+  const checkedIds = operation.selectedModIds.length > 0
+    ? new Set(operation.selectedModIds)
+    : new Set(operation.rootItem.mods.map((mod) => mod.id));
+
+  return `
+    <section class="mod-install-step">
+      <div>
+        <h4>Mod IDs from this Workshop item</h4>
+        <p>Select the variants this server should enable before dependency resolution.</p>
+      </div>
+      <div class="mod-install-options">
+        ${operation.rootItem.mods.map((mod) => `
+          <label class="mod-install-option">
+            <input
+              type="checkbox"
+              data-install-mod-id="${escapeAttribute(mod.id)}"
+              ${checkedIds.has(mod.id) ? 'checked' : ''}
+              ${selectable ? '' : 'disabled'}
+            >
+            <span>
+              <strong>${escapeHtml(mod.name)}</strong>
+              <code>${escapeHtml(mod.id)}</code>
+              ${mod.requires.length > 0 ? `<small>Requires ${escapeHtml(mod.requires.join(', '))}</small>` : ''}
+            </span>
+          </label>
+        `).join('')}
+      </div>
+      ${selectable
+        ? '<button class="quiet-button" data-install-resolve type="button">Resolve dependencies</button>'
+        : ''}
+    </section>
+  `;
+}
+
+function modInstallMissingDependencies(operation) {
+  if (operation.phase !== 'needs_dependency_input' || operation.missingDependencies.length === 0) {
+    return '';
+  }
+
+  return `
+    <section class="mod-install-step">
+      <div>
+        <h4>Required dependencies</h4>
+        <p>Paste the Workshop URL or ID for each required Mod ID the local Workshop content cannot resolve.</p>
+      </div>
+      <div class="mod-install-dependencies">
+        ${operation.missingDependencies.map((dependency) => `
+          <label class="mod-install-dependency">
+            <span>
+              <strong>${escapeHtml(dependency.requiredModId)}</strong>
+              <small>Required by ${escapeHtml(dependency.requiredBy.map((parent) => parent.modId).join(', '))}</small>
+            </span>
+            <input
+              data-install-required="${escapeAttribute(dependency.requiredModId)}"
+              autocomplete="off"
+              placeholder="Workshop URL or ID"
+            >
+          </label>
+        `).join('')}
+      </div>
+      <button class="primary-button" data-install-dependencies type="button">Download dependencies</button>
+    </section>
+  `;
+}
+
+function modInstallReview(operation) {
+  if (operation.phase !== 'ready_to_apply' || !operation.review) {
+    return '';
+  }
+
+  const review = operation.review;
+  return `
+    <section class="mod-install-step mod-install-review">
+      <div>
+        <h4>Apply and restart</h4>
+        <p>The panel will save a config backup, write these additions, and restart the game service.</p>
+      </div>
+      ${installReviewList('WorkshopItems', review.workshopItemsToAdd)}
+      ${installReviewList('Mod IDs', review.modsToAdd)}
+      ${installDependencyReview(review.dependencies)}
+      ${installMapFolderReview(review)}
+      <button class="danger-button" data-install-apply type="button">Apply and restart</button>
+    </section>
+  `;
+}
+
+function modInstallResult(operation) {
+  if (operation.phase === 'complete') {
+    return `
+      <section class="mod-install-step">
+        <h4>Install complete</h4>
+        <p>Downloaded Workshop content, saved config, and restarted the server service.</p>
+      </section>
+    `;
+  }
+
+  if (operation.phase === 'failed' && operation.applyResult?.configSaved) {
+    return `
+      <section class="mod-install-step">
+        <h4>Config saved</h4>
+        <p>The installer saved the mod config, but restart did not return an online service state.</p>
+      </section>
+    `;
+  }
+
+  return '';
+}
+
+function installReviewList(label, values) {
+  return `
+    <div class="mod-install-review-row">
+      <strong>${escapeHtml(label)}</strong>
+      <code>${escapeHtml(values.length > 0 ? values.join(';') : 'No new entries')}</code>
+    </div>
+  `;
+}
+
+function installDependencyReview(dependencies) {
+  if (!dependencies.length) {
+    return '';
+  }
+
+  return `
+    <div class="mod-install-review-row">
+      <strong>Dependencies</strong>
+      <div class="mod-install-tags">
+        ${dependencies.map((dependency) => `
+          <span><code>${escapeHtml(dependency.modId)}</code> Workshop ${escapeHtml(dependency.workshopId)}</span>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function installMapFolderReview(review) {
+  if (review.mapFolders.length === 0) {
+    return '';
+  }
+
+  return `
+    <div class="mod-install-review-row">
+      <strong>Map folders</strong>
+      ${review.canAddMapFolders
+        ? '<small>Selected folders will be added to Map.</small>'
+        : '<small>server.ini has no Map line; map folders cannot be added by this apply.</small>'}
+      <div class="mod-install-options">
+        ${review.mapFolders.map((folder) => `
+          <label class="mod-install-option">
+            <input
+              type="checkbox"
+              data-install-map="${escapeAttribute(folder)}"
+              ${review.canAddMapFolders ? 'checked' : ''}
+              ${review.canAddMapFolders ? '' : 'disabled'}
+            >
+            <span><code>${escapeHtml(folder)}</code></span>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function modInstallError(message) {
+  return `<p class="error-copy mod-install-error">${escapeHtml(message)}</p>`;
+}
+
+async function startModInstall(event) {
+  event.preventDefault();
+  const input = elements.settings.querySelector('#mod-install-input');
+  const value = input?.value.trim();
+  if (!value) {
+    showFlash('Paste a Steam Workshop URL or ID first.', 'error');
+    return;
+  }
+
+  const submit = event.currentTarget.querySelector('button[type="submit"]');
+  if (submit) {
+    submit.disabled = true;
+  }
+
+  try {
+    state.modInstall = await requestJson('/api/mods/install', {
+      method: 'POST',
+      body: JSON.stringify({ input: value }),
+    });
+    renderMods();
+  } catch (error) {
+    showFlash(error.message, 'error');
+    if (submit) {
+      submit.disabled = false;
+    }
+  }
+}
+
+function resetModInstall() {
+  if (modInstallPollTimer) {
+    clearTimeout(modInstallPollTimer);
+    modInstallPollTimer = null;
+  }
+  state.modInstall = null;
+  renderMods();
+}
+
+async function resolveModInstallSelection(event) {
+  event.currentTarget.disabled = true;
+  await resolveModInstall({ dependencies: [] });
+}
+
+async function resolveModInstallDependencies(event) {
+  event.currentTarget.disabled = true;
+  const dependencies = [...elements.settings.querySelectorAll('[data-install-required]')].map((input) => ({
+    requiredModId: input.dataset.installRequired,
+    input: input.value.trim(),
+  }));
+  if (dependencies.some((dependency) => !dependency.input)) {
+    showFlash('Every unresolved dependency needs a Workshop URL or ID.', 'error');
+    event.currentTarget.disabled = false;
+    return;
+  }
+
+  await resolveModInstall({ dependencies });
+}
+
+async function resolveModInstall({ dependencies }) {
+  if (!state.modInstall) {
+    return;
+  }
+
+  const selectedModIds = [...elements.settings.querySelectorAll('[data-install-mod-id]:checked')]
+    .map((input) => input.dataset.installModId);
+
+  try {
+    state.modInstall = await requestJson(`/api/mods/install/${encodeURIComponent(state.modInstall.id)}/dependencies`, {
+      method: 'POST',
+      body: JSON.stringify({ selectedModIds, dependencies }),
+    });
+    renderMods();
+    showFlash(
+      state.modInstall.phase === 'ready_to_apply'
+        ? 'Dependencies resolved. Review config additions before apply.'
+        : 'Resolve the required dependencies before apply.',
+      state.modInstall.phase === 'ready_to_apply' ? 'ok' : 'error',
+    );
+  } catch (error) {
+    showFlash(error.message, 'error');
+    await refreshModInstallStatus();
+  }
+}
+
+async function applyModInstall(event) {
+  if (!state.modInstall?.review) {
+    return;
+  }
+  if (!window.confirm('Apply this mod install and restart the Project Zomboid service now?')) {
+    return;
+  }
+
+  event.currentTarget.disabled = true;
+  const selectedMapFolders = [...elements.settings.querySelectorAll('[data-install-map]:checked')]
+    .map((input) => input.dataset.installMap);
+
+  try {
+    state.modInstall = await requestJson(`/api/mods/install/${encodeURIComponent(state.modInstall.id)}/apply`, {
+      method: 'POST',
+      body: JSON.stringify({
+        revision: state.modInstall.review.revision,
+        selectedMapFolders,
+      }),
+    });
+    await Promise.all([
+      loadMods(),
+      loadFile('ini'),
+      loadBackups('ini'),
+      loadApplyStatus('mods'),
+      loadServiceStatus(),
+    ]);
+    renderMods();
+    showFlash(
+      state.modInstall.phase === 'complete'
+        ? 'Workshop mod install applied and server restart returned online.'
+        : state.modInstall.error?.message || 'Mod config saved, but activation did not complete.',
+      state.modInstall.phase === 'complete' ? 'ok' : 'error',
+    );
+  } catch (error) {
+    showFlash(error.message, 'error');
+    await refreshModInstallStatus();
+  }
+}
+
+function scheduleModInstallPoll() {
+  if (modInstallPollTimer) {
+    clearTimeout(modInstallPollTimer);
+    modInstallPollTimer = null;
+  }
+  if (!state.modInstall || !['downloading', 'inspecting', 'saving_config', 'restarting'].includes(state.modInstall.phase)) {
+    return;
+  }
+
+  modInstallPollTimer = setTimeout(refreshModInstallStatus, 900);
+}
+
+async function refreshModInstallStatus() {
+  if (!state.modInstall) {
+    return;
+  }
+
+  try {
+    state.modInstall = await requestJson(`/api/mods/install/${encodeURIComponent(state.modInstall.id)}`);
+    if (state.activeFile === 'mods') {
+      renderMods();
+    }
+  } catch (error) {
+    showFlash(error.message, 'error');
+  }
+}
+
+function modInstallPhase(phase) {
+  if (phase === 'downloading') return 'Downloading';
+  if (phase === 'inspecting') return 'Inspecting';
+  if (phase === 'select_mods') return 'Select Mod IDs';
+  if (phase === 'needs_dependency_input') return 'Needs dependencies';
+  if (phase === 'ready_to_apply') return 'Ready to apply';
+  if (phase === 'saving_config') return 'Saving';
+  if (phase === 'restarting') return 'Restarting';
+  if (phase === 'complete') return 'Complete';
+  return 'Failed';
+}
+
+function modInstallTone(phase) {
+  if (phase === 'complete' || phase === 'ready_to_apply') {
+    return 'online';
+  }
+  if (phase === 'failed') {
+    return 'offline';
+  }
+  return 'pending';
 }
 
 function addModItem(listName) {

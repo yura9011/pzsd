@@ -24,7 +24,8 @@ The panel ships with a curated metadata catalog covering ~110 INI settings and ~
 - Keep unknown keys visible and preserve untouched file structure.
 - Mask password-like settings on read.
 - Keep large config groups collapsible while search reopens matching settings.
-- Edit existing `Mods` and `WorkshopItems` INI lists through a dedicated manual mods surface.
+- Install a Workshop mod from URL/ID by downloading it through SteamCMD, inspecting local `mod.info` dependencies and map folders, saving reviewed INI additions, and restarting after required dependencies are resolved.
+- Edit existing `Mods` and `WorkshopItems` INI lists through the advanced manual mods surface.
 - Manage spawn regions through a dedicated Spawn tab — reads `<server>_spawnregions.lua`, shows all regions with checkboxes, rewrites the file with only enabled regions.
 - Operate the running server through a local RCON Live tab for online players, manual commands, world save, and broadcasts.
 - Show disk-vs-runtime application status by surface. `server.ini` can run RCON `reloadoptions` and compare comparable `showoptions` output; Sandbox, Mods, and Spawn are tracked by disk revision versus service restart time.
@@ -42,7 +43,8 @@ The panel ships with a curated metadata catalog covering ~110 INI settings and ~
 - The panel reads and writes disk config. It does not yet prove the running game has loaded a saved Sandbox value.
 - The INI Apply live path proves only comparable non-sensitive options surfaced by RCON `showoptions`; it is not a generic runtime verification path for Mods, Spawn, or SandboxVars.
 - Live RCON operations need `PZ_RCON_PASSWORD` in the panel env plus matching RCON values in `servertest.ini`; they are unavailable until the game RCON listener is ready.
-- The mods surface writes only `Mods` and `WorkshopItems`; map mods can still require a separate `Map` edit.
+- The manual mods surface writes only `Mods` and `WorkshopItems`; the guided Workshop installer can add locally detected map folders to an existing `Map` line during its reviewed apply.
+- Workshop dependency resolution is local-first. The installer follows `require=` from downloaded `mod.info`; if it cannot map a required Mod ID to downloaded Workshop content it blocks apply and asks for the dependency Workshop URL or ID.
 - The Spawn tab rewrites `<server>_spawnregions.lua` from scratch — regions disabled and saved are removed from the file entirely. To re-enable a removed region, the user must re-add it manually or restore a backup.
 - The Spawn tab does not manage `<server>_spawnpoints.lua` or `SpawnPoint` in server.ini. It only toggles which spawn regions appear in the in-game spawn selector.
 - When the `<server>_spawnregions.lua` file does not exist, the Spawn tab shows the 4 vanilla regions (Muldraugh, West Point, Riverside, Rosewood) as defaults and creates the file on first save.
@@ -95,6 +97,7 @@ curl http://127.0.0.1:3210/api/server/status
 - `repos/Zomboid_Server_Manager_Docker-main/Zomboid_Server_Manager_Docker-main/app/app/Services/ServerIniParser.php`
 - `repos/Zomboid_Server_Manager_Docker-main/Zomboid_Server_Manager_Docker-main/app/app/Services/SandboxLuaParser.php`
 - `repos/Zomboid_Server_Manager_Docker-main/Zomboid_Server_Manager_Docker-main/app/app/Services/ModManager.php`
+- `repos/Zomboid_Server_Manager_Docker-main/Zomboid_Server_Manager_Docker-main/app/app/Services/SteamWorkshopClient.php`
 - `repos/Zomboid_Server_Manager_Docker-main/Zomboid_Server_Manager_Docker-main/app/resources/js/lib/config-metadata.ts`
 - `repos/zomboid-control-panel-main/zomboid-control-panel-main/server/routes/mods.js`
 - `repos/pz-admin-main/pz-admin-main/rcon.go`
@@ -107,4 +110,4 @@ Decide the next slice before implementing:
 
 1. Player administration on top of the Live RCON foundation: guided kick/ban/whitelist/access actions with explicit guardrails.
 2. Runtime verification for saved Sandbox settings beyond restart evidence, likely by evaluating the local `PanelBridge` runtime sandbox introspection approach.
-3. A richer mods slice: Workshop lookup/import, disk detection of multiple Mod IDs, and map-folder handling.
+3. The next mods slice: guided remove/delete/reorder, update status, and optional Steam API dependency metadata beyond local `mod.info`.
