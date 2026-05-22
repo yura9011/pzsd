@@ -19,6 +19,7 @@ export class SystemdService {
         '--property=SubState',
         '--property=UnitFileState',
         '--property=Description',
+        '--property=ActiveEnterTimestamp',
         '--no-pager',
       ]);
 
@@ -31,6 +32,7 @@ export class SystemdService {
         subState: properties.SubState || 'unknown',
         unitFileState: properties.UnitFileState || 'unknown',
         description: properties.Description || this.unit,
+        activeSince: parseSystemdTimestamp(properties.ActiveEnterTimestamp),
       };
     } catch (error) {
       return {
@@ -40,6 +42,7 @@ export class SystemdService {
         activeState: 'unknown',
         subState: 'unknown',
         unitFileState: 'unknown',
+        activeSince: null,
         error: commandErrorMessage(error, 'systemctl status check failed'),
       };
     }
@@ -70,6 +73,15 @@ export function parseSystemctlProperties(stdout) {
 
 export function isUnitOnline(activeState, subState) {
   return activeState === 'active' && subState === 'running';
+}
+
+export function parseSystemdTimestamp(value) {
+  if (!value || value === 'n/a') {
+    return null;
+  }
+
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : new Date(timestamp).toISOString();
 }
 
 function commandErrorMessage(error, fallback) {

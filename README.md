@@ -39,8 +39,9 @@ Verified VPS baseline on May 21, 2026:
 - Creates per-file backups before saves and restores, with last-20 retention.
 - Uses revision checks so an old browser view cannot overwrite a newer file.
 - Shows `Online` when the configured `systemd` unit is `active / running`, otherwise shows `Offline`, and asks for confirmation before restart.
+- Separates saved disk config from loaded/runtime evidence: `server.ini` can be applied and compared through RCON, while Sandbox, Mods, and Spawn use service-restart evidence.
 
-V1 reads and writes config files on disk. After a save, the restart banner means the file changed and the server may need to load it again. V1 does not yet compare disk config against sandbox values loaded inside the running game process.
+V1 reads and writes config files on disk. After a save, the application status block shows whether a file is only saved, is newer than the running service, was loaded after a service restart, or matches the comparable `server.ini` options exposed by RCON. V1 does not yet compare disk config against sandbox values loaded inside the running game process.
 
 ## Local Run
 
@@ -144,8 +145,10 @@ The UI uses the same-origin JSON API. All endpoints except `POST /api/auth/login
 - `GET /api/auth/check` — verify token is still valid
 - `GET /api/config/ini`
 - `PATCH /api/config/ini`
+- `POST /api/config/ini/apply`
 - `GET /api/config/sandbox`
 - `PATCH /api/config/sandbox`
+- `GET /api/config/apply-status?surface=ini|sandbox|mods|spawn`
 - `GET /api/mods`
 - `PATCH /api/mods`
 - `GET /api/config/spawn`
@@ -175,6 +178,8 @@ Only changed keys already present in the source file are accepted. The dedicated
 
 The spawn API reads and rewrites `<PZ_SERVER_NAME>_spawnregions.lua` entirely. The payload contains the full regions array with `enabled` booleans; disabled regions are excluded from the rewritten file. If the file does not exist, the panel returns 4 vanilla region defaults and creates the file on first save.
 
+`POST /api/config/ini/apply` takes the loaded INI revision, runs RCON `reloadoptions`, then compares comparable non-sensitive `server.ini` values against RCON `showoptions`. It rejects stale revisions before touching runtime state. `GET /api/config/apply-status` reports disk revision timing against the configured `systemd` active timestamp for the requested editor surface.
+
 ## Sandbox Verification Boundary
 
 For a saved sandbox change, V1 can prove:
@@ -182,9 +187,9 @@ For a saved sandbox change, V1 can prove:
 1. The diff was accepted for an existing `SandboxVars.lua` key.
 2. The file on disk contains the saved value.
 3. A backup exists.
-4. The configured game service restarted or is online.
+4. Whether the configured game service restarted after that disk revision was written.
 
-V1 cannot yet prove the running game process is using that exact sandbox value. A future runtime verification path should use an in-game/RCON/bridge surface; the `zomboid-control-panel` reference under `repos/` includes a `PanelBridge` sandbox introspection path worth evaluating.
+V1 cannot yet prove the running game process is using that exact sandbox value. The `server.ini` Apply live path is narrower: RCON `reloadoptions` plus `showoptions` can compare only the non-sensitive INI options that RCON exposes. A future runtime verification path for Sandbox should use an in-game/RCON/bridge surface; the `zomboid-control-panel` reference under `repos/` includes a `PanelBridge` sandbox introspection path worth evaluating.
 
 The Live tab is a separate runtime surface: RCON can show players and execute server commands while the disk editor continues to show saved config file state.
 
@@ -202,9 +207,10 @@ Manual VPS smoke test:
 2. Point `/etc/pz-config-panel.env` at that `Server` directory and profile name.
 3. Reach the panel at `http://<vps-ip>:3210` and log in.
 4. Collapse and search config groups, then change a harmless existing setting, review the diff, and save.
-5. Open the Mods tab, review a manual Workshop ID or Mod ID list change, and save only when the INI edit is intended.
-6. Open the Spawn tab, uncheck one or more regions, review the diff, and save. Verify that `<server>_spawnregions.lua` on disk contains only the enabled regions.
-7. Confirm a backup appears in the backup rail.
-8. Restore that backup and confirm the file value returns.
-9. Confirm status is visible and restart requires confirmation.
-10. Configure local RCON, open the Live tab, refresh players, run a safe command, send a broadcast, and confirm the response history stays in the browser session.
+5. For a harmless `server.ini` setting, use `Apply live` and confirm the application state reports the RCON comparison result.
+6. Open the Mods tab, review a manual Workshop ID or Mod ID list change, and save only when the INI edit is intended.
+7. Open the Spawn tab, uncheck one or more regions, review the diff, and save. Verify that `<server>_spawnregions.lua` on disk contains only the enabled regions.
+8. Confirm a backup appears in the backup rail.
+9. Restore that backup and confirm the file value returns.
+10. Confirm status is visible and restart requires confirmation; Sandbox, Mods, and Spawn show restart evidence instead of a live apply claim.
+11. Configure local RCON, open the Live tab, refresh players, run a safe command, send a broadcast, and confirm the response history stays in the browser session.

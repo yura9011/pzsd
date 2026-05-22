@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { createApp } from '../src/app.js';
+import { ConfigApplyService } from '../src/lib/config-apply-service.js';
 import { ConfigFileService } from '../src/lib/config-file-service.js';
 import { LiveRconService } from '../src/lib/live-rcon-service.js';
 
@@ -258,6 +259,66 @@ test('live API reports RCON state, players, commands, save, and broadcast', asyn
     'save',
     'servermsg "Be ready \\"now\\""',
   ]);
+});
+
+test('apply status API is authenticated and applies current INI revisions', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'pz-panel-apply-api-'));
+  const configDir = path.join(root, 'Server');
+  const backupDir = path.join(root, 'backups');
+  await fs.mkdir(configDir, { recursive: true });
+  await fs.copyFile(new URL('./fixtures/server.ini', import.meta.url), path.join(configDir, 'servertest.ini'));
+  await fs.copyFile(new URL('./fixtures/sandbox.lua', import.meta.url), path.join(configDir, 'servertest_SandboxVars.lua'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+
+  const configFiles = new ConfigFileService({ configDir, backupDir, serverName: 'servertest' });
+  const systemd = {
+    async status() {
+      return {
+        unit: 'project-zomboid.service',
+        available: true,
+        online: true,
+        activeSince: '2026-05-21T20:30:00.000Z',
+      };
+    },
+  };
+  const live = {
+    async status() {
+      return { ready: true };
+    },
+    async execute(command) {
+      return {
+        command,
+        response: command === 'showoptions' ? '* Public=true\n* MaxPlayers=16\n' : 'Options reloaded',
+        executedAt: '2026-05-21T20:05:00.000Z',
+      };
+    },
+  };
+  const app = createApp({
+    auth: TEST_AUTH,
+    configFiles,
+    systemd,
+    live,
+    configApply: new ConfigApplyService({ configFiles, systemd, live }),
+  });
+  const api = await listen(t, app);
+
+  assert.equal((await fetch(`${api}/api/config/apply-status?surface=ini`)).status, 401);
+  const token = await login(api);
+  const invalidSurface = await fetch(`${api}/api/config/apply-status?surface=world`, {
+    headers: authHeaders(token),
+  });
+  assert.equal(invalidSurface.status, 400);
+
+  const loaded = await fetch(`${api}/api/config/ini`, {
+    headers: authHeaders(token),
+  }).then((response) => response.json());
+  const applied = await fetch(`${api}/api/config/ini/apply`, {
+    method: 'POST',
+    headers: authHeaders(token, true),
+    body: JSON.stringify({ revision: loaded.revision }),
+  }).then((response) => response.json());
+  assert.equal(applied.applied, true);
+  assert.equal(applied.status.state, 'runtime_matches_disk');
 });
 
 async function listen(t, app) {

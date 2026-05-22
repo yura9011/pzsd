@@ -117,7 +117,7 @@ p {
   padding: 1.2rem clamp(1rem, 4vw, 3.5rem) 2.5rem;
 }
 
-.restart-banner,
+.apply-status,
 .flash {
   align-items: center;
   border: 1px solid var(--line);
@@ -128,14 +128,30 @@ p {
   padding: 0.9rem 1rem;
 }
 
-.restart-banner {
-  background: #2e2414;
-  border-color: #7b5f2b;
+.apply-status {
+  background: var(--panel);
 }
 
-.restart-banner span {
-  color: #f2d6a2;
-  margin-left: 0.55rem;
+.apply-status div:first-child {
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+}
+
+.apply-status strong {
+  font-size: 1rem;
+}
+
+.apply-status span:not(.state-pill) {
+  color: var(--muted);
+}
+
+.apply-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: end;
 }
 
 .flash {
@@ -425,6 +441,11 @@ button:focus-visible {
 
 .state-pill[data-state="offline"] {
   border-color: var(--red);
+}
+
+.state-pill[data-state="pending"] {
+  border-color: var(--amber);
+  color: #f2d6a2;
 }
 
 .backup-rail {

@@ -27,6 +27,7 @@ The panel ships with a curated metadata catalog covering ~110 INI settings and ~
 - Edit existing `Mods` and `WorkshopItems` INI lists through a dedicated manual mods surface.
 - Manage spawn regions through a dedicated Spawn tab — reads `<server>_spawnregions.lua`, shows all regions with checkboxes, rewrites the file with only enabled regions.
 - Operate the running server through a local RCON Live tab for online players, manual commands, world save, and broadcasts.
+- Show disk-vs-runtime application status by surface. `server.ini` can run RCON `reloadoptions` and compare comparable `showoptions` output; Sandbox, Mods, and Spawn are tracked by disk revision versus service restart time.
 - Require diff review before save.
 - Create and restore per-file config backups with last-20 retention.
 - Reject stale browser revisions and unsafe config values.
@@ -39,6 +40,7 @@ The panel ships with a curated metadata catalog covering ~110 INI settings and ~
 - Auth uses in-memory sessions. Panel restart loses all active sessions, requiring re-login. Sessions expire after `SESSION_TTL_HOURS` hours, defaulting to 8.
 - The panel has no HTTPS. Use a reverse proxy (nginx, Cloudflare Tunnel) for encrypted transport in production.
 - The panel reads and writes disk config. It does not yet prove the running game has loaded a saved Sandbox value.
+- The INI Apply live path proves only comparable non-sensitive options surfaced by RCON `showoptions`; it is not a generic runtime verification path for Mods, Spawn, or SandboxVars.
 - Live RCON operations need `PZ_RCON_PASSWORD` in the panel env plus matching RCON values in `servertest.ini`; they are unavailable until the game RCON listener is ready.
 - The mods surface writes only `Mods` and `WorkshopItems`; map mods can still require a separate `Map` edit.
 - The Spawn tab rewrites `<server>_spawnregions.lua` from scratch — regions disabled and saved are removed from the file entirely. To re-enable a removed region, the user must re-add it manually or restore a backup.
@@ -60,6 +62,13 @@ Key files:
 - `public/app.js`: `loadSpawn()`, `renderSpawn()`, `collectSpawnChanges()`, `reviewSpawnChanges()`, `saveReviewedSpawn()`
 
 Reference for Lua parse/generate patterns: `repos/zomboid-control-panel-main/server/routes/serverFiles.js` lines 562–611.
+
+## Config Application Status
+
+- `GET /api/config/apply-status?surface=ini|sandbox|mods|spawn` combines the current disk revision and file mtime with `systemd` active-since time.
+- Disk changes newer than the active game service remain saved-only or restart-required depending on whether that surface has an apply-live path.
+- `POST /api/config/ini/apply` requires the current INI revision, runs RCON `reloadoptions`, and compares non-sensitive comparable INI keys from RCON `showoptions`.
+- Runtime Sandbox verification still needs a separate bridge or an equivalent B42 introspection surface before the panel can claim exact Sandbox values are active.
 
 ## Verification
 
@@ -97,5 +106,5 @@ curl http://127.0.0.1:3210/api/server/status
 Decide the next slice before implementing:
 
 1. Player administration on top of the Live RCON foundation: guided kick/ban/whitelist/access actions with explicit guardrails.
-2. Runtime verification for saved Sandbox settings, likely by evaluating the local `PanelBridge` runtime sandbox introspection approach.
+2. Runtime verification for saved Sandbox settings beyond restart evidence, likely by evaluating the local `PanelBridge` runtime sandbox introspection approach.
 3. A richer mods slice: Workshop lookup/import, disk detection of multiple Mod IDs, and map-folder handling.

@@ -25,12 +25,17 @@
     </header>
 
     <main class="workspace">
-      <section id="restart-banner" class="restart-banner" hidden>
+      <section id="apply-status" class="apply-status" hidden>
         <div>
-          <strong>Config saved.</strong>
-          <span>A server restart may be required before players see the change.</span>
+          <p class="eyebrow">Config application</p>
+          <strong id="apply-title">Checking saved revision</strong>
+          <span id="apply-detail">Loading runtime evidence.</span>
         </div>
-        <button id="banner-restart" class="danger-button" type="button">Restart now</button>
+        <div class="apply-actions">
+          <span id="apply-state" class="state-pill">Checking</span>
+          <button id="apply-live" class="primary-button" type="button" hidden>Apply live</button>
+          <button id="apply-restart" class="danger-button" type="button" hidden>Restart server</button>
+        </div>
       </section>
 
       <p id="flash" class="flash" role="status" aria-live="polite" hidden></p>

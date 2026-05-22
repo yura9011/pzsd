@@ -7,7 +7,7 @@ import { HttpError } from './lib/http-error.js';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultPublicDir = path.resolve(currentDir, '../public');
 
-export function createApp({ configFiles, systemd, live, auth, publicDir = defaultPublicDir }) {
+export function createApp({ configFiles, systemd, live, configApply, auth, publicDir = defaultPublicDir }) {
   if (!auth || typeof auth.password !== 'string' || auth.password === '') {
     throw new Error('Panel auth configuration must include a password.');
   }
@@ -78,6 +78,14 @@ export function createApp({ configFiles, systemd, live, auth, publicDir = defaul
   app.patch('/api/config/sandbox', requireAuth, route(async (req, res) => {
     validateConfigPatchChanges(req.body);
     res.json(await configFiles.save('sandbox', req.body));
+  }));
+
+  app.get('/api/config/apply-status', requireAuth, route(async (req, res) => {
+    res.json(await configApply.status(req.query.surface));
+  }));
+
+  app.post('/api/config/ini/apply', requireAuth, route(async (req, res) => {
+    res.json(await configApply.applyIni(req.body));
   }));
 
   app.get('/api/mods', requireAuth, route(async (_req, res) => {

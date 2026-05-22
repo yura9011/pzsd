@@ -13,6 +13,7 @@ const state = {
   liveHistory: [],
   pendingChanges: null,
   groupStates: new Map(),
+  applyStatuses: new Map(),
 };
 
 let isLoginShowing = false;
@@ -36,13 +37,17 @@ const elements = {
   diffList: document.querySelector('#diff-list'),
   confirmSave: document.querySelector('#confirm-save'),
   flash: document.querySelector('#flash'),
-  restartBanner: document.querySelector('#restart-banner'),
+  applyStatus: document.querySelector('#apply-status'),
+  applyTitle: document.querySelector('#apply-title'),
+  applyDetail: document.querySelector('#apply-detail'),
+  applyState: document.querySelector('#apply-state'),
+  applyLive: document.querySelector('#apply-live'),
+  applyRestart: document.querySelector('#apply-restart'),
   serviceUnit: document.querySelector('#service-unit'),
   serviceState: document.querySelector('#service-state'),
   serviceDetail: document.querySelector('#service-detail'),
   refreshStatus: document.querySelector('#refresh-status'),
   restartServer: document.querySelector('#restart-server'),
-  bannerRestart: document.querySelector('#banner-restart'),
   loginDialog: document.querySelector('#login-dialog'),
   loginForm: document.querySelector('#login-form'),
   loginUsername: document.querySelector('#login-username'),
@@ -64,7 +69,8 @@ elements.reloadFile.addEventListener('click', reloadActiveSurface);
 elements.refreshBackups.addEventListener('click', () => loadBackups(backupFileForSurface(state.activeFile)));
 elements.refreshStatus.addEventListener('click', loadServiceStatus);
 elements.restartServer.addEventListener('click', restartServer);
-elements.bannerRestart.addEventListener('click', restartServer);
+elements.applyLive.addEventListener('click', applyIniLive);
+elements.applyRestart.addEventListener('click', restartServer);
 
 function getToken() {
   try {
@@ -161,6 +167,7 @@ async function initPanel() {
     loadFile('ini'),
     loadFile('sandbox'),
     loadServiceStatus(),
+    loadApplyStatus('ini'),
   ]);
   await loadBackups(state.activeFile);
   renderActiveFile();
@@ -182,6 +189,7 @@ async function selectFile(file) {
     await loadFile(file, true);
   }
 
+  await loadApplyStatus(file);
   renderActiveFile();
   await loadBackups(backupFileForSurface(file));
 }
@@ -256,16 +264,35 @@ async function loadLive(forceRender = false) {
   }
 }
 
+async function loadApplyStatus(surface) {
+  if (surface === 'live') {
+    renderApplyStatus();
+    return;
+  }
+
+  try {
+    state.applyStatuses.set(surface, await requestJson(`/api/config/apply-status?surface=${surface}`));
+  } catch (error) {
+    state.applyStatuses.set(surface, { surface, error: error.message });
+  }
+
+  if (surface === state.activeFile) {
+    renderApplyStatus();
+  }
+}
+
 async function reloadActiveSurface() {
   state.pendingChanges = null;
   if (state.activeFile === 'mods') {
     await loadMods(true);
     await loadBackups('ini');
+    await loadApplyStatus('mods');
     return;
   }
 
   if (state.activeFile === 'spawn') {
     await loadSpawn(true);
+    await loadApplyStatus('spawn');
     return;
   }
 
@@ -275,9 +302,11 @@ async function reloadActiveSurface() {
   }
 
   await loadFile(state.activeFile, true);
+  await loadApplyStatus(state.activeFile);
 }
 
 function renderActiveFile() {
+  renderApplyStatus();
   if (state.activeFile === 'mods') {
     renderMods();
     return;
@@ -871,7 +900,7 @@ async function saveReviewedChanges() {
       state.modDraft = null;
     }
     await loadBackups(state.activeFile);
-    showRestartBanner();
+    await loadApplyStatus(state.activeFile);
     showFlash(`${saved.filename} saved. ${saved.changedKeys.length} setting changes were written.`, 'ok');
   } catch (error) {
     showFlash(error.message, 'error');
@@ -969,9 +998,7 @@ async function saveReviewedMods() {
     renderActiveFile();
     await loadFile('ini');
     await loadBackups('ini');
-    if (saved.restartRequired) {
-      showRestartBanner();
-    }
+    await loadApplyStatus('mods');
     const writeSummary = saved.changedKeys.length === 0
       ? 'No list changes were written.'
       : `${saved.changedKeys.length} list changes were written.`;
@@ -1002,7 +1029,7 @@ async function saveReviewedSpawn() {
     state.pendingChanges = null;
     elements.diffDialog.close();
     renderActiveFile();
-    showRestartBanner();
+    await loadApplyStatus('spawn');
     const enabledCount = saved.regions.filter((r) => r.enabled).length;
     showFlash(`${saved.filename} saved. ${enabledCount} regions enabled.`, 'ok');
   } catch (error) {
@@ -1068,7 +1095,7 @@ async function restoreBackup(backupId) {
       await loadMods(true);
     }
     await loadBackups(backupFileForSurface(state.activeFile));
-    showRestartBanner();
+    await loadApplyStatus(state.activeFile);
     showFlash(`${restored.filename} restored from backup.`, 'ok');
   } catch (error) {
     showFlash(error.message, 'error');
@@ -1085,7 +1112,7 @@ async function loadServiceStatus() {
       ? `systemd: ${status.activeState} / ${status.subState}`
       : 'systemd status unavailable';
     elements.restartServer.disabled = !status.available;
-    elements.bannerRestart.disabled = !status.available;
+    elements.applyRestart.disabled = !status.available;
     if (!status.available && status.error) {
       showFlash(status.error, 'error');
     }
@@ -1094,7 +1121,7 @@ async function loadServiceStatus() {
     elements.serviceState.dataset.state = 'offline';
     elements.serviceDetail.textContent = 'systemd status unavailable';
     elements.restartServer.disabled = true;
-    elements.bannerRestart.disabled = true;
+    elements.applyRestart.disabled = true;
     showFlash(error.message, 'error');
   }
 }
@@ -1105,15 +1132,44 @@ async function restartServer() {
   }
 
   elements.restartServer.disabled = true;
-  elements.bannerRestart.disabled = true;
+  elements.applyRestart.disabled = true;
   try {
     const data = await requestJson('/api/server/restart', { method: 'POST' });
-    elements.restartBanner.hidden = true;
     showFlash(`Restart requested for ${data.status.unit}.`, 'ok');
     await loadServiceStatus();
+    await loadApplyStatus(state.activeFile);
   } catch (error) {
     showFlash(error.message, 'error');
     await loadServiceStatus();
+    await loadApplyStatus(state.activeFile);
+  }
+}
+
+async function applyIniLive() {
+  const status = state.applyStatuses.get('ini');
+  if (!status?.revision) {
+    return;
+  }
+
+  elements.applyLive.disabled = true;
+  try {
+    const data = await requestJson('/api/config/ini/apply', {
+      method: 'POST',
+      body: JSON.stringify({ revision: status.revision }),
+    });
+    state.applyStatuses.set('ini', data.status);
+    renderApplyStatus();
+    showFlash(
+      data.applied
+        ? 'Comparable server.ini runtime options match after RCON apply.'
+        : 'RCON reload ran, but runtime verification is still incomplete.',
+      data.applied ? 'ok' : 'error',
+    );
+  } catch (error) {
+    showFlash(error.message, 'error');
+    await loadApplyStatus('ini');
+  } finally {
+    elements.applyLive.disabled = false;
   }
 }
 
@@ -1291,8 +1347,121 @@ function updateGroupDirtyCounts() {
   }
 }
 
-function showRestartBanner() {
-  elements.restartBanner.hidden = false;
+function renderApplyStatus() {
+  if (state.activeFile === 'live') {
+    elements.applyStatus.hidden = true;
+    return;
+  }
+
+  elements.applyStatus.hidden = false;
+  const status = state.applyStatuses.get(state.activeFile);
+  if (!status) {
+    setApplyStatusText('Checking saved revision', 'Loading disk and runtime evidence.', 'Checking', 'pending');
+    setApplyActions(false, false);
+    return;
+  }
+
+  if (status.error) {
+    setApplyStatusText('Application status unavailable', status.error, 'Unknown', 'offline');
+    setApplyActions(false, false);
+    return;
+  }
+
+  setApplyStatusText(
+    applyTitle(status),
+    applyDetail(status),
+    applyStateLabel(status.state),
+    applyStateTone(status.state),
+  );
+  setApplyActions(
+    state.activeFile === 'ini' && status.canApplyLive && status.state !== 'runtime_matches_disk',
+    status.canRestart && status.state !== 'runtime_matches_disk' && status.state !== 'loaded_after_restart',
+  );
+}
+
+function setApplyStatusText(title, detail, stateLabel, tone) {
+  elements.applyTitle.textContent = title;
+  elements.applyDetail.textContent = detail;
+  elements.applyState.textContent = stateLabel;
+  elements.applyState.dataset.state = tone;
+}
+
+function setApplyActions(showLive, showRestart) {
+  elements.applyLive.hidden = !showLive;
+  elements.applyRestart.hidden = !showRestart;
+}
+
+function applyTitle(status) {
+  if (status.state === 'runtime_matches_disk') {
+    return 'Comparable server.ini runtime options match';
+  }
+  if (status.state === 'loaded_after_restart') {
+    return `${surfaceLabel(status.surface)} loaded after restart`;
+  }
+  if (status.state === 'restart_required') {
+    return `${surfaceLabel(status.surface)} saved on disk`;
+  }
+  if (status.state === 'saved_on_disk') {
+    return `${surfaceLabel(status.surface)} saved on disk`;
+  }
+  return `${surfaceLabel(status.surface)} runtime state unknown`;
+}
+
+function applyDetail(status) {
+  if (status.state === 'runtime_matches_disk') {
+    return comparisonDetail(status, 'RCON showoptions matches comparable server.ini values.');
+  }
+  if (status.state === 'loaded_after_restart') {
+    return status.surface === 'sandbox'
+      ? 'The service restarted after this SandboxVars write. Exact Sandbox runtime introspection is not part of this PR.'
+      : 'The service restarted after this saved file revision was written.';
+  }
+  if (status.state === 'restart_required') {
+    return status.surface === 'sandbox'
+      ? 'SandboxVars changed after this service start. Restart to load the disk change; runtime Sandbox values are not introspected here.'
+      : 'This disk change is newer than the running service. Restart to load it.';
+  }
+  if (status.state === 'saved_on_disk' && status.surface === 'ini') {
+    return comparisonDetail(status, 'Apply live with RCON or restart before treating the server.ini change as active.');
+  }
+  if (status.state === 'saved_on_disk') {
+    return 'The disk change is saved. Start or restart the server before treating it as loaded.';
+  }
+  return 'Disk state exists, but the panel has no reliable runtime evidence for this surface yet.';
+}
+
+function comparisonDetail(status, fallback) {
+  const mismatches = status.comparison?.mismatchedKeys?.length || 0;
+  if (mismatches > 0) {
+    return `${mismatches} comparable INI ${mismatches === 1 ? 'option differs' : 'options differ'} from RCON runtime. ${fallback}`;
+  }
+  return fallback;
+}
+
+function surfaceLabel(surface) {
+  if (surface === 'ini') return 'server.ini';
+  if (surface === 'sandbox') return 'SandboxVars.lua';
+  if (surface === 'mods') return 'Mods lists';
+  if (surface === 'spawn') return 'Spawn regions';
+  return 'Config';
+}
+
+function applyStateLabel(state) {
+  if (state === 'runtime_matches_disk') return 'Runtime match';
+  if (state === 'loaded_after_restart') return 'Restart loaded';
+  if (state === 'restart_required') return 'Restart required';
+  if (state === 'saved_on_disk') return 'Saved';
+  return 'Unknown';
+}
+
+function applyStateTone(state) {
+  if (state === 'runtime_matches_disk' || state === 'loaded_after_restart') {
+    return 'online';
+  }
+  if (state === 'saved_on_disk' || state === 'restart_required') {
+    return 'pending';
+  }
+  return 'offline';
 }
 
 function showEditorError(message) {

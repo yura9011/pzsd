@@ -1,5 +1,6 @@
 import { createApp } from './app.js';
 import { readRuntimeConfig } from './config.js';
+import { ConfigApplyService } from './lib/config-apply-service.js';
 import { ConfigFileService } from './lib/config-file-service.js';
 import { LiveRconService } from './lib/live-rcon-service.js';
 import { SourceRconClient } from './lib/source-rcon-client.js';
@@ -11,10 +12,14 @@ if (!process.env.PANEL_PASSWORD) {
 }
 
 const runtime = readRuntimeConfig();
+const configFiles = new ConfigFileService(runtime);
+const systemd = new SystemdService({ unit: runtime.systemdUnit });
+const live = new LiveRconService({ rcon: new SourceRconClient(runtime.rcon) });
 const app = createApp({
-  configFiles: new ConfigFileService(runtime),
-  systemd: new SystemdService({ unit: runtime.systemdUnit }),
-  live: new LiveRconService({ rcon: new SourceRconClient(runtime.rcon) }),
+  configFiles,
+  systemd,
+  live,
+  configApply: new ConfigApplyService({ configFiles, systemd, live }),
   auth: { username: runtime.username, password: runtime.password },
 });
 

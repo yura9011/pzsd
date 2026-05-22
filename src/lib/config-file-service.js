@@ -59,6 +59,31 @@ export class ConfigFileService {
     };
   }
 
+  async readApplySnapshot(surface) {
+    if (surface === 'spawn') {
+      return this.readSpawnApplySnapshot();
+    }
+
+    const kind = surface === 'mods' ? 'ini' : surface;
+    const { content, filePath, spec } = await this.readContent(kind);
+    const stat = await this.statApplyFile(filePath);
+    const parsed = spec.parse(content);
+    const snapshot = {
+      surface,
+      file: kind,
+      filename: path.basename(filePath),
+      revision: revisionForContent(content),
+      diskChangedAt: stat.mtime.toISOString(),
+    };
+
+    if (kind === 'ini') {
+      snapshot.settings = parsed.settings;
+      snapshot.metadata = metadataForSettings(kind, parsed.settings);
+    }
+
+    return snapshot;
+  }
+
   async save(kind, payload) {
     assertPayload(payload);
     const { content, spec } = await this.readContent(kind);
@@ -240,6 +265,36 @@ export class ConfigFileService {
     };
   }
 
+  async readSpawnApplySnapshot() {
+    const filePath = this.spawnRegionsFilePath();
+    try {
+      const [content, stat] = await Promise.all([
+        fs.readFile(filePath, 'utf8'),
+        this.statApplyFile(filePath),
+      ]);
+
+      return {
+        surface: 'spawn',
+        file: 'spawn',
+        filename: path.basename(filePath),
+        revision: revisionForContent(content),
+        diskChangedAt: stat.mtime.toISOString(),
+      };
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        return {
+          surface: 'spawn',
+          file: 'spawn',
+          filename: path.basename(filePath),
+          revision: null,
+          diskChangedAt: null,
+        };
+      }
+
+      throw new HttpError(500, 'Failed to read spawn regions file status.');
+    }
+  }
+
   async saveSpawn(payload) {
     if (!isPlainRecord(payload) || !Array.isArray(payload.regions)) {
       throw new HttpError(400, 'Spawn save payload must include a regions array.');
@@ -367,6 +422,17 @@ export class ConfigFileService {
         throw new HttpError(404, `${path.basename(filePath)} was not found. Start the B42 server once and check PZ_CONFIG_DIR.`);
       }
       throw new HttpError(500, `Failed to read ${spec.label}.`);
+    }
+  }
+
+  async statApplyFile(filePath) {
+    try {
+      return await fs.stat(filePath);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        throw error;
+      }
+      throw new HttpError(500, `Failed to inspect ${path.basename(filePath)}.`);
     }
   }
 
