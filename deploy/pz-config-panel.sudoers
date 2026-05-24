@@ -1,3 +1,4 @@
 # Install as /etc/sudoers.d/pz-config-panel and keep mode 0440.
 # Keep the unit name in sync with PZ_SYSTEMD_UNIT.
 steam ALL=(root) NOPASSWD: /usr/bin/systemctl restart project-zomboid.service
+steam ALL=(root) NOPASSWD: /opt/pz-config-panel/scripts/wipe-server.sh

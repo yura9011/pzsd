@@ -5,8 +5,9 @@ import { HttpError } from './http-error.js';
 const execFile = promisify(execFileCallback);
 
 export class SystemdService {
-  constructor({ unit, run = execFile }) {
+  constructor({ unit, wipeScript, run = execFile }) {
     this.unit = unit;
+    this.wipeScript = wipeScript;
     this.run = run;
   }
 
@@ -56,6 +57,23 @@ export class SystemdService {
     }
 
     return this.status();
+  }
+
+  async wipe(serverName, zomboidDir) {
+    if (!this.wipeScript) {
+      throw new HttpError(503, 'Wipe script is not configured.');
+    }
+
+    try {
+      const result = await this.run('sudo', ['-n', this.wipeScript, serverName, zomboidDir]);
+      return {
+        wiped: true,
+        stdout: result.stdout?.trim() || '',
+        stderr: result.stderr?.trim() || '',
+      };
+    } catch (error) {
+      throw new HttpError(502, commandErrorMessage(error, 'server wipe failed'));
+    }
   }
 }
 

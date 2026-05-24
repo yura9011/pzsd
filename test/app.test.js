@@ -382,6 +382,57 @@ test('apply status API is authenticated and applies current INI revisions', asyn
   assert.equal(applied.status.state, 'runtime_matches_disk');
 });
 
+
+test('wipe API requires auth and returns wipe result', async (t) => {
+  const calls = [];
+  const app = createApp({
+    auth: TEST_AUTH,
+    configFiles: {},
+    systemd: {
+      async status() {
+        return { unit: 'project-zomboid.service', available: true, online: false };
+      },
+      async wipe(serverName, zomboidDir) {
+        calls.push([serverName, zomboidDir]);
+        return { wiped: true, stdout: 'Wipe complete for servertest', stderr: '' };
+      },
+    },
+    serverName: 'servertest',
+    zomboidDir: '/home/steam/Zomboid',
+  });
+  const api = await listen(t, app);
+
+  const unauthorized = await fetch(`${api}/api/server/wipe`, { method: 'POST' });
+  assert.equal(unauthorized.status, 401);
+
+  const token = await login(api);
+  const result = await fetch(`${api}/api/server/wipe`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  }).then((response) => response.json());
+  assert.equal(result.wiped, true);
+  assert.match(result.stdout, /Wipe complete/);
+  assert.deepEqual(calls, [['servertest', '/home/steam/Zomboid']]);
+});
+
+test('wipe API returns 500 when systemd has no wipe method', async (t) => {
+  const app = createApp({
+    auth: TEST_AUTH,
+    configFiles: {},
+    systemd: {},
+    serverName: 'servertest',
+    zomboidDir: '/home/steam/Zomboid',
+  });
+  const api = await listen(t, app);
+  const token = await login(api);
+
+  const response = await fetch(`${api}/api/server/wipe`, {
+    method: 'POST',
+    headers: authHeaders(token),
+  });
+  assert.equal(response.status, 500);
+});
+
 async function listen(t, app) {
   const server = http.createServer(app);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));

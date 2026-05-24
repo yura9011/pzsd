@@ -50,6 +50,7 @@ const elements = {
   serviceDetail: document.querySelector('#service-detail'),
   refreshStatus: document.querySelector('#refresh-status'),
   restartServer: document.querySelector('#restart-server'),
+  wipeServer: document.querySelector('#wipe-server'),
   loginDialog: document.querySelector('#login-dialog'),
   loginForm: document.querySelector('#login-form'),
   loginUsername: document.querySelector('#login-username'),
@@ -71,6 +72,7 @@ elements.reloadFile.addEventListener('click', reloadActiveSurface);
 elements.refreshBackups.addEventListener('click', () => loadBackups(backupFileForSurface(state.activeFile)));
 elements.refreshStatus.addEventListener('click', loadServiceStatus);
 elements.restartServer.addEventListener('click', restartServer);
+elements.wipeServer.addEventListener('click', wipeServer);
 elements.applyLive.addEventListener('click', applyIniLive);
 elements.applyRestart.addEventListener('click', restartServer);
 
@@ -601,6 +603,28 @@ function renderLive() {
         </form>
       </section>
 
+      <section class="live-panel live-panel--danger">
+        <header class="live-panel-heading">
+          <div>
+            <p class="eyebrow">Danger zone</p>
+            <h3>Server wipe</h3>
+          </div>
+        </header>
+        <div class="live-wipe-info">
+          <p><strong>This permanently deletes the world, player database, and logs.</strong> The server is stopped, wiped, and restarted. Config files (server.ini, SandboxVars.lua) are preserved.</p>
+          <ul>
+            <li>World data: <code>Zomboid/Saves/Multiplayer/servertest/</code></li>
+            <li>Player database: <code>Zomboid/servertest.db</code></li>
+            <li>Server logs: <code>Zomboid/Logs/</code></li>
+          </ul>
+          <p class="live-copy">Type <strong>WIPE</strong> below and click the button to confirm.</p>
+          <div class="live-input-row">
+            <input id="wipe-confirm-input" autocomplete="off" placeholder="Type WIPE to confirm">
+            <button id="wipe-execute" class="danger-button" type="button">Wipe server</button>
+          </div>
+        </div>
+      </section>
+
       <section class="live-panel live-console">
         <header class="live-panel-heading">
           <div>
@@ -626,6 +650,7 @@ function renderLive() {
   elements.settings.querySelector('#live-save-world')?.addEventListener('click', saveLiveWorld);
   elements.settings.querySelector('#live-command-form')?.addEventListener('submit', sendLiveCommand);
   elements.settings.querySelector('#live-broadcast-form')?.addEventListener('submit', broadcastLiveMessage);
+  elements.settings.querySelector('#wipe-execute')?.addEventListener('click', wipeServer);
   updateChangeState();
 }
 
@@ -1562,6 +1587,44 @@ async function restartServer() {
     showFlash(error.message, 'error');
     await loadServiceStatus();
     await loadApplyStatus(state.activeFile);
+  }
+}
+
+
+async function wipeServer() {
+  const confirmInput = document.querySelector('#wipe-confirm-input');
+  if (confirmInput && confirmInput.value !== 'WIPE') {
+    showFlash('Type WIPE in the confirmation field to proceed.', 'error');
+    return;
+  }
+
+  if (!window.confirm('Wipe the Project Zomboid server now? All world data, player database, and logs will be permanently deleted. Config files will be preserved. This cannot be undone.')) {
+    return;
+  }
+
+  if (!window.confirm('Are you absolutely sure? There is no undo. The server will be stopped, wiped, and restarted.')) {
+    return;
+  }
+
+  const button = elements.wipeServer || document.querySelector('#wipe-execute');
+  if (button) {
+    button.disabled = true;
+  }
+
+  try {
+    const data = await requestJson('/api/server/wipe', { method: 'POST' });
+    showFlash('Server wiped successfully: ' + (data.stdout || 'done.'), 'ok');
+    if (confirmInput) {
+      confirmInput.value = '';
+    }
+    await loadServiceStatus();
+  } catch (error) {
+    showFlash(error.message, 'error');
+    await loadServiceStatus();
+  } finally {
+    if (button) {
+      button.disabled = false;
+    }
   }
 }
 

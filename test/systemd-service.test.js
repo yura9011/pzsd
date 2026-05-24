@@ -56,3 +56,52 @@ test('systemd service reports restart failures as API-safe errors', async () => 
     (error) => error.status === 502 && error.message === 'sudo: a password is required',
   );
 });
+
+test('systemd wipe calls the script with server name and Zomboid dir', async () => {
+  const commands = [];
+  const service = new SystemdService({
+    unit: 'project-zomboid.service',
+    wipeScript: '/opt/pz-config-panel/scripts/wipe-server.sh',
+    async run(command, args) {
+      commands.push([command, args]);
+      return { stdout: 'Stopping service...\nRemoving world data...\nWipe complete for servertest\n', stderr: '' };
+    },
+  });
+
+  const result = await service.wipe('servertest', '/home/steam/Zomboid');
+  assert.equal(commands[0][0], 'sudo');
+  assert.deepEqual(commands[0][1], ['-n', '/opt/pz-config-panel/scripts/wipe-server.sh', 'servertest', '/home/steam/Zomboid']);
+  assert.equal(result.wiped, true);
+  assert.match(result.stdout, /Wipe complete/);
+});
+
+test('systemd wipe returns 503 when wipe script is not configured', async () => {
+  const service = new SystemdService({
+    unit: 'project-zomboid.service',
+    async run() {
+      return { stdout: '' };
+    },
+  });
+
+  await assert.rejects(
+    service.wipe('servertest', '/home/steam/Zomboid'),
+    (error) => error.status === 503 && error.message === 'Wipe script is not configured.',
+  );
+});
+
+test('systemd wipe returns 502 when script fails', async () => {
+  const service = new SystemdService({
+    unit: 'project-zomboid.service',
+    wipeScript: '/opt/pz-config-panel/scripts/wipe-server.sh',
+    async run() {
+      const error = new Error('script exited with code 1');
+      error.stderr = 'ERROR: Invalid server name.';
+      throw error;
+    },
+  });
+
+  await assert.rejects(
+    service.wipe('bad name', '/home/steam/Zomboid'),
+    (error) => error.status === 502,
+  );
+});

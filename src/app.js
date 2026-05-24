@@ -7,7 +7,7 @@ import { HttpError } from './lib/http-error.js';
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const defaultPublicDir = path.resolve(currentDir, '../public');
 
-export function createApp({ configFiles, systemd, live, configApply, modInstaller, auth, publicDir = defaultPublicDir }) {
+export function createApp({ configFiles, systemd, live, configApply, modInstaller, auth, serverName, zomboidDir, publicDir = defaultPublicDir }) {
   if (!auth || typeof auth.password !== 'string' || auth.password === '') {
     throw new Error('Panel auth configuration must include a password.');
   }
@@ -137,6 +137,10 @@ export function createApp({ configFiles, systemd, live, configApply, modInstalle
       restarted: true,
       status: await systemd.restart(),
     });
+  }));
+
+  app.post('/api/server/wipe', requireAuth, route(async (_req, res) => {
+    res.json(await systemd.wipe(serverName, zomboidDir));
   }));
 
   app.get('/api/live/rcon/status', requireAuth, route(async (_req, res) => {
